@@ -130,7 +130,11 @@ thread from Telegram.
 
 ### Continue a task from Telegram
 
-Use `/threads` to choose a project and one of its recent tasks. After selection:
+Use `/threads` to choose a project and one of its recent tasks. Project scope and order, soft task
+deletions, and display titles are read from Codex App's private local state. That format is not a
+public API and may require a compatibility update after a Codex App upgrade. If the state cannot be
+read, the gateway does not infer projects from task directories; tasks remain available under
+“Other tasks.” After selection:
 
 - a normal message continues the active task;
 - replying to a result or question card continues the task bound to that card;

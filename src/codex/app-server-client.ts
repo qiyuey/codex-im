@@ -204,9 +204,10 @@ export class AppServerClient extends EventEmitter {
     return response;
   }
 
-  async listThreads(limit = 10): Promise<ThreadListResponse> {
+  async listThreads(limit = 10, cursor?: string): Promise<ThreadListResponse> {
     const params: ThreadListParams = {
       limit,
+      ...(cursor ? { cursor } : {}),
       sortKey: "updated_at",
       sortDirection: "desc",
       archived: false,

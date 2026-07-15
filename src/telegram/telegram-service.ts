@@ -6,6 +6,7 @@ import type {
   UserInputRequest,
   WatchedThreadSnapshot,
 } from "../codex/app-server-client.js";
+import { type CodexAppUiState, loadCodexAppUiState } from "../codex/app-ui-state.js";
 import type { ToolRequestUserInputAnswer } from "../codex/protocol/v2/ToolRequestUserInputAnswer.js";
 import { ThreadQueue } from "../concurrency/thread-queue.js";
 import type { RuntimeConfig } from "../config/runtime-config.js";
@@ -77,6 +78,7 @@ export class TelegramService {
     private readonly appServer: TelegramCodexService,
     private readonly editDebounceMs = 750,
     private readonly inboundEnabled: () => boolean = () => true,
+    private readonly appUiStateLoader: () => Promise<CodexAppUiState | null> = loadCodexAppUiState,
   ) {
     this.unsubscribe.push(
       this.appServer.onUserInputRequest((request) => {
@@ -801,8 +803,22 @@ export class TelegramService {
   }
 
   private async loadThreadProjectCatalog(): Promise<ThreadProjectCatalog> {
-    const response = await this.appServer.listThreads(100);
-    return buildThreadProjectCatalog(response.data, this.config.allowedWorkspaces);
+    const threads: ProjectThread[] = [];
+    const seenCursors = new Set<string>();
+    let cursor: string | undefined;
+    for (let page = 0; page < 20; page += 1) {
+      const response = await this.appServer.listThreads(100, cursor);
+      threads.push(...response.data);
+      const nextCursor = response.nextCursor;
+      if (!nextCursor || seenCursors.has(nextCursor)) break;
+      seenCursors.add(nextCursor);
+      cursor = nextCursor;
+    }
+    return buildThreadProjectCatalog(
+      threads,
+      this.config.allowedWorkspaces,
+      await this.appUiStateLoader(),
+    );
   }
 
   private async sendThreadProjectPicker(chatId: number, topicId: string | null): Promise<void> {

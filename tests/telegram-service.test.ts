@@ -7,6 +7,7 @@ import type {
   ResolvedServerRequest,
   UserInputRequest,
 } from "../src/codex/app-server-client.js";
+import type { CodexAppUiState } from "../src/codex/app-ui-state.js";
 import type { RuntimeConfig } from "../src/config/runtime-config.js";
 import { GatewayDatabase } from "../src/storage/database.js";
 import { GatewayStateStore } from "../src/storage/gateway-state-store.js";
@@ -26,6 +27,7 @@ let api: FakeTelegramApi;
 let codex: FakeCodexService;
 let service: TelegramService;
 let config: RuntimeConfig;
+let appUiState: CodexAppUiState | null;
 
 beforeEach(async () => {
   directory = await realpath(await mkdtemp(join(tmpdir(), "gateway-telegram-")));
@@ -33,6 +35,7 @@ beforeEach(async () => {
   state = new GatewayStateStore(database);
   api = new FakeTelegramApi();
   codex = createFakeCodex();
+  appUiState = null;
   config = {
     telegramBotToken: "test-token",
     telegramAllowedUserId: 7,
@@ -41,7 +44,15 @@ beforeEach(async () => {
     dispatchIntervalMs: 100,
     language: "zh",
   };
-  service = new TelegramService(config, api, state, codex as unknown as TelegramCodexService, 0);
+  service = new TelegramService(
+    config,
+    api,
+    state,
+    codex as unknown as TelegramCodexService,
+    0,
+    () => true,
+    async () => appUiState,
+  );
 });
 
 afterEach(async () => {
@@ -54,7 +65,15 @@ describe("TelegramService", () => {
   it("renders command UI in English mode", async () => {
     await service.drain();
     config = { ...config, language: "en" };
-    service = new TelegramService(config, api, state, codex as unknown as TelegramCodexService, 0);
+    service = new TelegramService(
+      config,
+      api,
+      state,
+      codex as unknown as TelegramCodexService,
+      0,
+      () => true,
+      async () => appUiState,
+    );
 
     await service.handleMessage(message({ text: "/current" }));
 
@@ -176,6 +195,7 @@ describe("TelegramService", () => {
 
   it("returns projects first, then their threads, and selects a thread", async () => {
     await mkdir(join(directory, ".git"));
+    appUiState = appState([directory]);
     codex.listThreads.mockResolvedValue({
       data: [
         { id: "abcdef12-full", cwd: directory, name: "Example", preview: "Example" },
@@ -365,21 +385,27 @@ describe("TelegramService", () => {
     try {
       await Promise.all([mkdir(join(directory, ".git")), mkdir(join(secondDirectory, ".git"))]);
       config = { ...config, allowedWorkspaces: [directory, secondDirectory] };
+      appUiState = appState([directory, secondDirectory]);
       service = new TelegramService(
         config,
         api,
         state,
         codex as unknown as TelegramCodexService,
         0,
+        () => true,
+        async () => appUiState,
       );
-      codex.listThreads.mockResolvedValue({
-        data: [
-          { id: "gateway-thread", cwd: directory, name: "Gateway", preview: "" },
-          { id: "financial-thread", cwd: secondDirectory, name: "Financial", preview: "" },
-        ],
-        nextCursor: null,
-        backwardsCursor: null,
-      });
+      codex.listThreads
+        .mockResolvedValueOnce({
+          data: [{ id: "gateway-thread", cwd: directory, name: "Gateway", preview: "" }],
+          nextCursor: "next-page",
+          backwardsCursor: null,
+        })
+        .mockResolvedValueOnce({
+          data: [{ id: "financial-thread", cwd: secondDirectory, name: "Financial", preview: "" }],
+          nextCursor: null,
+          backwardsCursor: null,
+        });
 
       await service.handleMessage(message({ text: "/threads" }));
 
@@ -389,6 +415,7 @@ describe("TelegramService", () => {
         "📋 其他任务",
         "⬅️ 返回",
       ]);
+      expect(codex.listThreads).toHaveBeenNthCalledWith(2, 100, "next-page");
     } finally {
       await rm(secondDirectory, { force: true, recursive: true });
     }
@@ -498,6 +525,18 @@ describe("TelegramService", () => {
     expect(codex.runTurn).toHaveBeenCalledOnce();
   });
 });
+
+function appState(projectRoots: readonly string[]): CodexAppUiState {
+  return {
+    projectRoots,
+    projectOrder: projectRoots,
+    projectlessThreadIds: new Set(),
+    threadWorkspaceRootHints: new Map(),
+    threadProjectAssignments: new Map(),
+    deletedThreadIds: new Set(),
+    threadDescriptions: new Map(),
+  };
+}
 
 class FakeTelegramApi implements TelegramApi {
   readonly sent: Array<

@@ -1,13 +1,16 @@
 import { basename } from "node:path";
 import type { CanonicalTurnResult, WatchedThreadSnapshot } from "../codex/app-server-client.js";
 import type { ToolRequestUserInputQuestion } from "../codex/protocol/v2/ToolRequestUserInputQuestion.js";
-import type { OutboundNotification } from "../core/types.js";
+import type { NotificationSource, OutboundNotification } from "../core/types.js";
 import {
   escapeRichMarkdownText,
   prepareRichMarkdown,
   richMarkdownInlineCode,
 } from "./rich-markdown.js";
 import type { TelegramInlineButton } from "./types.js";
+
+export const THREAD_PICKER_CALLBACK_DATA = "threads";
+export const TASK_SWITCH_CALLBACK_PREFIX = "switch:";
 
 export function renderCompletion(result: CanonicalTurnResult): string {
   const icon = result.status === "completed" ? "✅" : result.status === "interrupted" ? "⏹" : "❌";
@@ -32,7 +35,7 @@ export function renderStreaming(text: string, done: boolean): string {
 export function renderNotification(notification: OutboundNotification): string {
   const source =
     notification.source.kind === "notification_only"
-      ? "\n\n> ℹ️ Notification only · replies do not continue a Codex task."
+      ? "\n\n> ℹ️ 这是一条独立通知，未关联可继续对话的 Codex 任务。如需跟进，请点击下方“选择任务”，再发送一条新消息。"
       : "";
   return prepareRichMarkdown(
     `# 📬 ${escapeRichMarkdownText(notification.title)}\n\n` +
@@ -40,6 +43,14 @@ export function renderNotification(notification: OutboundNotification): string {
       `**Project:** ${richMarkdownInlineCode(projectLabel(notification.cwd))}` +
       source,
   );
+}
+
+export function notificationActionKeyboard(
+  source: NotificationSource,
+): readonly (readonly TelegramInlineButton[])[] {
+  return source.kind === "bound_task"
+    ? [taskSwitchButtonRow(source.codexThreadId)]
+    : [[{ text: "选择任务", callbackData: THREAD_PICKER_CALLBACK_DATA }]];
 }
 
 export function renderWatchedBlocked(snapshot: WatchedThreadSnapshot): string {
@@ -57,11 +68,16 @@ export function renderWatchedBlocked(snapshot: WatchedThreadSnapshot): string {
 
 export function taskActionKeyboard(threadId: string): readonly (readonly TelegramInlineButton[])[] {
   return [
-    [
-      { text: "Switch", callbackData: `thread:${threadId}` },
-      { text: "Mute", callbackData: `mute:${threadId}` },
-    ],
+    [...taskSwitchButtonRow(threadId), { text: "停止通知", callbackData: `mute:${threadId}` }],
   ];
+}
+
+export function taskSwitchKeyboard(threadId: string): readonly (readonly TelegramInlineButton[])[] {
+  return [taskSwitchButtonRow(threadId)];
+}
+
+function taskSwitchButtonRow(threadId: string): readonly TelegramInlineButton[] {
+  return [{ text: "切换到此任务", callbackData: `${TASK_SWITCH_CALLBACK_PREFIX}${threadId}` }];
 }
 
 export function renderUserInputQuestion(input: {

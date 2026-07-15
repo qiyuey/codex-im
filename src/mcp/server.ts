@@ -7,6 +7,7 @@ import { resolveDatabasePath } from "../config/paths.js";
 import { eventStates } from "../core/types.js";
 import { LocalKillSwitch } from "../security/kill-switch.js";
 import { openEventStore, openNotificationStore } from "../storage/open-store.js";
+import { notificationSourceFromRequestMeta } from "./request-source.js";
 
 const server = new McpServer({ name: "codex-im-gateway", version: "0.1.0" });
 
@@ -102,7 +103,7 @@ server.registerTool(
       duplicate: z.boolean(),
     }),
   },
-  async ({ cwd, title, message, dedupeKey }) => {
+  async ({ cwd, title, message, dedupeKey }, extra) => {
     const context = openNotificationStore();
     try {
       const idempotencyKey = `explicit:${dedupeKey ?? randomUUID()}`;
@@ -113,7 +114,7 @@ server.registerTool(
         cwd: resolve(cwd),
         title,
         message,
-        source: { kind: "notification_only" },
+        source: notificationSourceFromRequestMeta(extra._meta),
       });
       return success({ notificationId: notification.id, state: notification.state, duplicate });
     } finally {

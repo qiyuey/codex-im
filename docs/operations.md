@@ -31,9 +31,16 @@ checks the watched thread about every five seconds and sends only new terminal
 states. `/mute` removes the watch while keeping the selected thread; selecting a
 thread again re-enables it. `/detach` clears both selection and watch.
 
-Bound completion messages show Switch/Mute task actions. Explicit
-`$telegram-delivery` messages have no trusted thread identity and are labeled
-**Notification only**. For turns started from Telegram, non-secret
+Bound completion messages show **切换到此任务** / **停止通知** actions. These
+actions preserve the result text; stopping notifications updates only the
+buttons. Explicit
+`$telegram-delivery` messages automatically bind to the originating task when
+Codex supplies consistent request-level thread and turn metadata. If that
+metadata is unavailable or invalid, the message is labeled
+**这是一条独立通知，未关联可继续对话的 Codex 任务** and its **选择任务** action
+opens the workspace-filtered project picker without implying an exact task
+binding. Automatically bound notifications use **切换到此任务**. For
+turns started from Telegram, non-secret
 `request_user_input` questions appear as expiring one-time cards. Reply to the
 exact card for a free-form answer. Restarting the daemon invalidates pending
 cards because their app-server JSON-RPC connection has ended.

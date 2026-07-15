@@ -23,10 +23,12 @@ Use the bundled `telegram_deliver` MCP tool as the final action of an explicitly
    whether Telegram delivery was queued. A queued response is success; network delivery is handled
 asynchronously by the gateway daemon.
 
-This generic explicit delivery has no trusted Codex thread/turn identity. Its
-Telegram card is therefore labeled **Notification only**, and replying to it
-does not automatically continue the originating task. Never add, infer, or
-fabricate thread identifiers from cwd, title, timing, or recent activity.
+The MCP host may attach trusted Codex request metadata outside the model-visible
+tool arguments. When its thread and session identifiers agree, the gateway binds
+the Telegram card to that exact task automatically. If the host omits this
+metadata or it fails validation, the gateway safely sends an independent
+notification instead. Never add, infer, or fabricate thread identifiers in tool
+arguments from cwd, title, timing, or recent activity.
 
 If the task fails before producing its intended artifact, still deliver one failure summary when
 the prompt requires delivery. Never claim delivery succeeded when the MCP call failed.

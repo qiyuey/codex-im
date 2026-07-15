@@ -6,9 +6,10 @@
 ## Context
 
 Telegram messages need to communicate whether a reply can safely continue a
-Codex task. Explicit `$telegram-delivery` calls currently have no trusted
-thread/turn identity, while completion events and watched-thread notifications
-do. Codex turns started through the gateway can also issue the experimental
+Codex task. Explicit `$telegram-delivery` calls may contain trusted request-level
+Codex thread/turn metadata, while older or non-Codex MCP hosts may omit it.
+Completion events and watched-thread notifications already carry exact identity.
+Codex turns started through the gateway can also issue the experimental
 `item/tool/requestUserInput` app-server request.
 
 ## Decision
@@ -19,13 +20,26 @@ Represent notification identity as a required discriminated source:
 - `notification_only` carries no task identity and must say that replies do not
   continue a Codex task.
 
+For `telegram_deliver`, accept identity only from request metadata outside the
+model-visible arguments. Require the top-level `threadId`, nested `thread_id`,
+and nested `session_id` to match, and require a valid nested `turn_id`. Otherwise
+produce `notification_only`. Never infer identity from cwd, title, timing, or
+recent activity.
+
 Bound Telegram messages render a compact task card with the outcome in the
 heading, the agent's final message immediately below it, and project, short
 thread identifier, and optional duration on one secondary context line.
-Switch/Mute actions remain attached to the card. The
+Switch/Mute actions remain attached to the card. Persistent card actions never
+replace the result body: Switch acknowledges through the callback response, and
+Mute updates only the inline keyboard. The
 Telegram message is durably bound so direct replies route to the exact task.
 Switch selects and watches the task for subsequent non-reply messages; it
 does not start a new turn by itself.
+
+Project/thread pickers and `request_user_input` questions are temporary
+interaction messages. They may be replaced as the user advances, answers, or
+reaches an expired/terminal state. Opening a picker from a persistent unbound
+notification sends a separate picker and leaves the notification intact.
 
 Enable app-server's experimental API and handle only
 `item/tool/requestUserInput`. A request is eligible for Telegram only when it
@@ -50,5 +64,6 @@ sandbox or grant `danger-full-access`.
 - Desktop turns owned by another app-server connection still receive only
   watched terminal-state notifications; their interactive requests are not
   intercepted by this gateway.
-- Trusted automatic binding for generic `$telegram-delivery` remains a separate
-  host-capability problem and is never inferred from cwd, title, or recency.
+- Trusted automatic binding degrades to `notification_only` when Codex metadata
+  is missing or changes incompatibly, and is never inferred from cwd, title, or
+  recency.

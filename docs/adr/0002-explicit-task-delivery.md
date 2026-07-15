@@ -38,6 +38,7 @@ a stable run identifier, it is passed as the dedupe key for the logical run.
   final state through its notification queue health and inspection commands.
 - Workspace allowlisting remains mandatory and is checked by the daemon before
   any content leaves the machine.
-- Explicit one-way notifications do not automatically create a reply binding to
-  the originating Codex thread. Thread selection and continuation remain a
-  separate Telegram capability.
+- Explicit notifications automatically create an exact reply binding when the
+  Codex MCP host supplies consistent request-level thread/session and turn
+  metadata. Hosts without that capability safely retain one-way delivery;
+  thread identity is never inferred from workflow content.

@@ -53,5 +53,9 @@ export interface TelegramApi {
     markdown: string,
     inlineKeyboard?: readonly (readonly TelegramInlineButton[])[],
   ): Promise<void>;
+  editMessageKeyboard(
+    ref: TelegramMessageRef,
+    inlineKeyboard: readonly (readonly TelegramInlineButton[])[],
+  ): Promise<void>;
   answerCallbackQuery(queryId: string, text?: string): Promise<void>;
 }

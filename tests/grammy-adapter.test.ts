@@ -50,8 +50,9 @@ describe("GrammyTelegramAdapter", () => {
   it("sends and edits Rich Markdown through Bot API rich_message", async () => {
     const sendRichMessage = vi.fn(async () => ({ message_id: 13 }));
     const editMessageText = vi.fn(async () => true as const);
+    const editMessageReplyMarkup = vi.fn(async () => true as const);
     const bot = {
-      api: { sendRichMessage, editMessageText },
+      api: { sendRichMessage, editMessageText, editMessageReplyMarkup },
       catch: vi.fn(),
       on: vi.fn(),
     } as unknown as Bot;
@@ -61,6 +62,9 @@ describe("GrammyTelegramAdapter", () => {
       [{ text: "Continue", callbackData: "thread:abc" }],
     ]);
     await adapter.editRichMessage(ref, "# Final\n\n**done**");
+    await adapter.editMessageKeyboard(ref, [
+      [{ text: "切换到此任务", callbackData: "switch:abc" }],
+    ]);
 
     expect(sendRichMessage).toHaveBeenCalledWith(
       42,
@@ -80,5 +84,10 @@ describe("GrammyTelegramAdapter", () => {
       },
       {},
     );
+    expect(editMessageReplyMarkup).toHaveBeenCalledWith(42, 13, {
+      reply_markup: {
+        inline_keyboard: [[{ text: "切换到此任务", callback_data: "switch:abc" }]],
+      },
+    });
   });
 });

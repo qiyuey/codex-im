@@ -36,8 +36,8 @@ describe("ThreadWatchMonitor", () => {
     expect(sendRichMessage.mock.calls[0]?.[1]).toContain("completed");
     expect(sendRichMessage.mock.calls[0]?.[3]).toEqual([
       [
-        { text: "Switch", callbackData: "thread:thread-1" },
-        { text: "Mute", callbackData: "mute:thread-1" },
+        { text: "切换到此任务", callbackData: "switch:thread-1" },
+        { text: "停止通知", callbackData: "mute:thread-1" },
       ],
     ]);
     expect(state.getThreadWatch("telegram", "42")?.lastDeliveredTurnId).toBe("turn-new");

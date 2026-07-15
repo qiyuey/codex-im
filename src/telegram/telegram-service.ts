@@ -17,7 +17,10 @@ import {
   renderStreaming,
   renderUserInputAnswered,
   renderUserInputQuestion,
+  TASK_SWITCH_CALLBACK_PREFIX,
+  THREAD_PICKER_CALLBACK_DATA,
   taskActionKeyboard,
+  taskSwitchKeyboard,
 } from "./render.js";
 import {
   buildThreadProjectCatalog,
@@ -112,6 +115,11 @@ export class TelegramService {
       await this.handleUserInputCallback(query);
       return;
     }
+    if (query.data === THREAD_PICKER_CALLBACK_DATA) {
+      await this.api.answerCallbackQuery(query.queryId);
+      await this.sendThreadProjectPicker(query.chatId, query.topicId);
+      return;
+    }
     if (query.data.startsWith(PROJECT_CALLBACK_PREFIX)) {
       await this.handleProjectCallback(query, query.data.slice(PROJECT_CALLBACK_PREFIX.length));
       return;
@@ -120,19 +128,44 @@ export class TelegramService {
       await this.handleMuteCallback(query, query.data.slice(MUTE_CALLBACK_PREFIX.length));
       return;
     }
+    if (query.data.startsWith(TASK_SWITCH_CALLBACK_PREFIX)) {
+      await this.handleThreadSelectionCallback(
+        query,
+        query.data.slice(TASK_SWITCH_CALLBACK_PREFIX.length),
+        false,
+      );
+      return;
+    }
     if (!query.data.startsWith(THREAD_CALLBACK_PREFIX)) {
-      await this.api.answerCallbackQuery(query.queryId, "Unsupported action.");
+      await this.api.answerCallbackQuery(query.queryId, "不支持此操作。");
       return;
     }
     const threadId = query.data.slice(THREAD_CALLBACK_PREFIX.length);
+    const legacyBinding = this.state.findMessageBinding(
+      "telegram",
+      String(query.chatId),
+      query.messageId,
+    );
+    await this.handleThreadSelectionCallback(
+      query,
+      threadId,
+      legacyBinding?.codexThreadId !== threadId,
+    );
+  }
+
+  private async handleThreadSelectionCallback(
+    query: TelegramCallbackQuery,
+    threadId: string,
+    replaceSourceMessage: boolean,
+  ): Promise<void> {
     if (!threadId) {
-      await this.api.answerCallbackQuery(query.queryId, "Thread is no longer available.");
+      await this.api.answerCallbackQuery(query.queryId, "此任务已不可用。");
       return;
     }
     try {
       const resumed = await this.appServer.resumeThread(threadId);
       if (!(await isWorkspaceAllowed(resumed.cwd, this.config.allowedWorkspaces))) {
-        await this.api.answerCallbackQuery(query.queryId, "Thread is not available.");
+        await this.api.answerCallbackQuery(query.queryId, "此任务不可用。");
         return;
       }
       const snapshot = await this.appServer.readThreadSnapshot(threadId);
@@ -145,32 +178,44 @@ export class TelegramService {
       );
       await this.api.answerCallbackQuery(
         query.queryId,
-        `Switched to and watching ${threadId.slice(0, 8)}.`,
+        `已切换并关注任务 ${threadId.slice(0, 8)}。`,
       );
-      await this.api
-        .editTextMessage(
-          {
-            chatId: query.chatId,
-            messageId: query.messageId,
-            topicId: query.topicId,
-          },
-          `✅ Switched to and watching ${threadId.slice(0, 8)}.`,
-          [],
-        )
-        .catch(() => undefined);
+      if (replaceSourceMessage) {
+        await this.api
+          .editTextMessage(
+            {
+              chatId: query.chatId,
+              messageId: query.messageId,
+              topicId: query.topicId,
+            },
+            `✅ 已切换并关注任务 ${threadId.slice(0, 8)}。`,
+            [],
+          )
+          .catch(() => undefined);
+      }
     } catch {
-      await this.api.answerCallbackQuery(query.queryId, "Thread is no longer available.");
+      await this.api.answerCallbackQuery(query.queryId, "此任务已不可用。");
     }
   }
 
   private async handleMuteCallback(query: TelegramCallbackQuery, threadId: string): Promise<void> {
     const watch = this.state.getThreadWatch("telegram", String(query.chatId), query.topicId);
     if (!watch || watch.codexThreadId !== threadId) {
-      await this.api.answerCallbackQuery(query.queryId, "This task is no longer being watched.");
+      await this.api.answerCallbackQuery(query.queryId, "此任务当前未被关注。");
       return;
     }
     this.state.clearThreadWatch("telegram", String(query.chatId), query.topicId);
-    await this.api.answerCallbackQuery(query.queryId, "Task notifications muted.");
+    await this.api.answerCallbackQuery(query.queryId, "已停止此任务的完成通知，仍保持为当前任务。");
+    await this.api
+      .editMessageKeyboard(
+        {
+          chatId: query.chatId,
+          messageId: query.messageId,
+          topicId: query.topicId,
+        },
+        taskSwitchKeyboard(threadId),
+      )
+      .catch(() => undefined);
   }
 
   private async handleUserInputRequest(request: UserInputRequest): Promise<void> {
@@ -425,15 +470,13 @@ export class TelegramService {
     const project = catalog.projects.find((candidate) => candidate.id === projectId);
     const threads = projectId === NO_PROJECT_ID ? catalog.noProjectThreads : project?.threads;
     if (!threads) {
-      await this.api.answerCallbackQuery(query.queryId, "Project is no longer available.");
+      await this.api.answerCallbackQuery(query.queryId, "此项目已不可用。");
       return;
     }
 
     await this.api.answerCallbackQuery(query.queryId);
-    const label = project?.label ?? "Tasks";
-    const text = threads.length
-      ? `Select a thread in ${label}:`
-      : `No available threads in ${label}.`;
+    const label = project?.label ?? "其他任务";
+    const text = threads.length ? `请选择“${label}”中的任务：` : `“${label}”中没有可用任务。`;
     const keyboard = threads.slice(0, 10).map((thread) => [threadButton(thread)]);
     await this.api.editTextMessage(
       {
@@ -522,25 +565,7 @@ export class TelegramService {
       return;
     }
     if (command === "threads") {
-      const catalog = await this.loadThreadProjectCatalog();
-      const keyboard = catalog.projects.slice(0, 20).map((project) => [
-        {
-          text: `📁 ${project.label}`,
-          callbackData: `${PROJECT_CALLBACK_PREFIX}${project.id}`,
-        },
-      ]);
-      keyboard.push([
-        {
-          text: "📋 Tasks",
-          callbackData: `${PROJECT_CALLBACK_PREFIX}${NO_PROJECT_ID}`,
-        },
-      ]);
-      await this.api.sendTextMessage(
-        message.chatId,
-        "Select a project:",
-        message.topicId,
-        keyboard,
-      );
+      await this.sendThreadProjectPicker(message.chatId, message.topicId);
       return;
     }
     if (command === "use") {
@@ -643,8 +668,8 @@ export class TelegramService {
     if (decision.kind === "error") {
       const text =
         decision.code === "unknown_reply"
-          ? "That message is not bound to an available Codex thread."
-          : "Select a thread with /threads (or /use), or create one with /new.";
+          ? "这条消息未关联可继续对话的 Codex 任务。请先使用 /threads 选择对应任务，再发送一条新消息；不要继续引用回复这条通知。"
+          : "尚未选择 Codex 任务。请使用 /threads（或 /use）选择任务，或使用 /new 创建任务。";
       await this.api.sendTextMessage(message.chatId, text, message.topicId);
       return;
     }
@@ -746,6 +771,23 @@ export class TelegramService {
   private async loadThreadProjectCatalog(): Promise<ThreadProjectCatalog> {
     const response = await this.appServer.listThreads(100);
     return buildThreadProjectCatalog(response.data, this.config.allowedWorkspaces);
+  }
+
+  private async sendThreadProjectPicker(chatId: number, topicId: string | null): Promise<void> {
+    const catalog = await this.loadThreadProjectCatalog();
+    const keyboard = catalog.projects.slice(0, 20).map((project) => [
+      {
+        text: `📁 ${project.label}`,
+        callbackData: `${PROJECT_CALLBACK_PREFIX}${project.id}`,
+      },
+    ]);
+    keyboard.push([
+      {
+        text: "📋 其他任务",
+        callbackData: `${PROJECT_CALLBACK_PREFIX}${NO_PROJECT_ID}`,
+      },
+    ]);
+    await this.api.sendTextMessage(chatId, "请选择项目：", topicId, keyboard);
   }
 }
 

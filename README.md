@@ -32,8 +32,9 @@ installation still runs from a source checkout.
 - A reply never silently falls back to an unrelated active thread.
 - Multiple tasks and workspaces remain isolated from one another.
 - Bound results render as task cards with status, project, duration, and
-  **Switch**/**Mute** actions; unbound results are visibly marked
-  **Notification only**.
+  **切换到此任务**/**停止通知** actions; unbound results are visibly marked
+  **这是一条独立通知，未关联可继续对话的 Codex 任务**, with a **选择任务**
+  action that opens the allowed task picker.
 - When a Telegram-originated turn asks a non-secret `request_user_input`
   question, answer its one-time option card or reply directly to that card.
 
@@ -162,10 +163,15 @@ that chat/topic. The daemon reads only that thread through the public app-server
 protocol and delivers new terminal states; selecting another thread replaces
 the watch.
 
-The explicit notification is a one-way result delivery and is not automatically
-bound to a Codex thread, so its card is explicitly marked **Notification only**.
+An explicit notification is automatically bound when Codex supplies consistent
+request-level thread and turn metadata to the MCP tool. If that metadata is
+missing or invalid, its card is explicitly marked
+**这是一条独立通知，未关联可继续对话的 Codex 任务** and provides a
+**选择任务** action. Bound notifications provide **切换到此任务** for their
+exact thread.
 Bound completion and watched-thread cards say that replies continue the exact
-task and provide Switch/Mute actions. Telegram commands can still select and
+task and provide **切换到此任务**/**停止通知** actions without replacing the
+card body. Telegram commands can still select and
 resume allowed threads independently through `codex app-server`.
 
 Codex remains the source of truth for threads and turns. Internal Codex SQLite

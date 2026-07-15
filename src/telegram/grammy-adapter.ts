@@ -157,6 +157,17 @@ export class GrammyTelegramAdapter implements TelegramApi {
     );
   }
 
+  async editMessageKeyboard(
+    ref: TelegramMessageRef,
+    inlineKeyboard: readonly (readonly TelegramInlineButton[])[],
+  ): Promise<void> {
+    await this.bot.api.editMessageReplyMarkup(
+      ref.chatId,
+      Number(ref.messageId),
+      editOptions(inlineKeyboard),
+    );
+  }
+
   async answerCallbackQuery(queryId: string, text?: string): Promise<void> {
     await this.bot.api.answerCallbackQuery(queryId, text ? { text } : undefined);
   }

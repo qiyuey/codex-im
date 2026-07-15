@@ -57,7 +57,8 @@ describe("Telegram rendering", () => {
     expect(rendered).toContain("| 项目 | 结果 |");
     expect(rendered).not.toContain("<b>");
     expect(rendered).toContain("**Project:** `&lt;private&gt;`");
-    expect(rendered).toContain("Notification only");
+    expect(rendered).toContain("这是一条独立通知");
+    expect(rendered).toContain("请点击下方“选择任务”，再发送一条新消息");
   });
 
   it("does not emit unsafe Markdown links", () => {

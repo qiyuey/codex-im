@@ -49,7 +49,13 @@ stdio process.
 The `$telegram-delivery` skill defines an opt-in workflow contract. After the
 task and its verification finish, Codex calls `telegram_deliver` once with a
 self-contained title, result message, and absolute workspace path. The MCP tool
-only inserts a local notification; it does not call Telegram.
+only inserts a local notification; it does not call Telegram. At the enqueue
+boundary it reads Codex's request-level MCP metadata, which is separate from the
+model-visible arguments. A notification becomes `bound_task` only when the
+top-level `threadId` and the nested `thread_id` and `session_id` all match and a
+valid `turn_id` is present. Missing, malformed, or inconsistent metadata safely
+produces `notification_only`; identity is never accepted from ordinary tool
+arguments.
 
 The result message contract is Rich Markdown. Final task results, watched Codex
 turns, and streamed/final Codex content use Telegram Rich Messages, preserving
@@ -123,6 +129,24 @@ different threads concurrently while serializing each individual thread.
 Input callbacks additionally bind an opaque in-memory token to the exact chat,
 topic, Telegram message, Codex thread/turn, request, and current question. They
 expire on TTL, request resolution, turn completion, or process restart.
+Notification action callbacks preserve source identity: `bound_task` actions
+carry the exact thread ID, while `notification_only` actions only open the
+workspace-filtered task picker and never infer a thread from project or recency.
+
+Inline interactions follow an explicit message-lifetime contract:
+
+| Interaction | Message kind | Callback result |
+| --- | --- | --- |
+| Switch task | Persistent result/status card | Preserve the complete message and acknowledge through the callback toast |
+| Stop notifications | Persistent status card | Preserve the message; update only its inline keyboard |
+| Choose task | Persistent unbound notification | Preserve the notification and send a separate temporary picker |
+| Choose project/task | Temporary picker | Replace the picker as it advances or completes |
+| Answer/expire input | Temporary `request_user_input` card | Replace the question with its terminal state |
+
+New persistent cards use a dedicated `switch:` callback prefix. The handler also
+checks durable message bindings for legacy `thread:` cards so already-delivered
+messages receive the same preserve-in-place behavior. Only unbound `thread:`
+callbacks from temporary pickers may replace their source message.
 
 ### Local kill switch
 

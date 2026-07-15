@@ -86,7 +86,8 @@ describe("TelegramService", () => {
     await service.drain();
 
     expect(codex.runTurn).not.toHaveBeenCalled();
-    expect(api.sent[0]?.content).toContain("not bound");
+    expect(api.sent[0]?.content).toContain("这条消息未关联可继续对话的 Codex 任务");
+    expect(api.sent[0]?.content).toContain("不要继续引用回复这条通知");
   });
 
   it("rejects a durable binding whose resumed workspace is not allowed", async () => {
@@ -132,7 +133,34 @@ describe("TelegramService", () => {
 
     expect(state.getThreadWatch("telegram", "42")).toBeNull();
     expect(state.getActiveThread("telegram", "42")).toBe("thread-1");
-    expect(api.callbackAnswers.at(-1)?.text).toBe("Task notifications muted.");
+    expect(api.callbackAnswers.at(-1)?.text).toBe("已停止此任务的完成通知，仍保持为当前任务。");
+    expect(api.edits).toHaveLength(0);
+    expect(api.keyboardEdits).toEqual([
+      {
+        ref: { chatId: 42, messageId: "200", topicId: null },
+        inlineKeyboard: [[{ text: "切换到此任务", callbackData: "switch:thread-1" }]],
+      },
+    ]);
+  });
+
+  it("preserves a persistent task card when its switch action is selected", async () => {
+    await service.handleCallbackQuery(callbackQuery({ messageId: "201", data: "switch:thread-1" }));
+
+    expect(state.getActiveThread("telegram", "42")).toBe("thread-1");
+    expect(api.callbackAnswers.at(-1)?.text).toBe("已切换并关注任务 thread-1。");
+    expect(api.edits).toHaveLength(0);
+  });
+
+  it("preserves an already-delivered legacy task card when switching", async () => {
+    state.bindMessage("telegram", "42", "202", "legacy-thread", "turn-1");
+
+    await service.handleCallbackQuery(
+      callbackQuery({ messageId: "202", data: "thread:legacy-thread" }),
+    );
+
+    expect(state.getActiveThread("telegram", "42")).toBe("legacy-thread");
+    expect(api.callbackAnswers.at(-1)?.text).toBe("已切换并关注任务 legacy-t。");
+    expect(api.edits).toHaveLength(0);
   });
 
   it("returns projects first, then their threads, and selects a thread", async () => {
@@ -149,7 +177,7 @@ describe("TelegramService", () => {
     await service.handleMessage(message({ text: "/threads", topicId: "9" }));
 
     expect(api.sent[0]).toMatchObject({
-      content: "Select a project:",
+      content: "请选择项目：",
       format: "plain_text",
       topicId: "9",
     });
@@ -159,7 +187,7 @@ describe("TelegramService", () => {
       callbackData: expect.stringMatching(/^project:[A-Za-z0-9_-]{16}$/),
     });
     expect(api.sent[0]?.inlineKeyboard?.[1]?.[0]).toEqual({
-      text: "📋 Tasks",
+      text: "📋 其他任务",
       callbackData: "project:none",
     });
     const projectCallback = api.sent[0]?.inlineKeyboard?.[0]?.[0]?.callbackData;
@@ -170,7 +198,7 @@ describe("TelegramService", () => {
     expect(api.sent).toHaveLength(1);
     expect(api.edits[0]).toMatchObject({
       ref: { chatId: 42, messageId: "100", topicId: "9" },
-      content: expect.stringContaining("Select a thread in"),
+      content: expect.stringContaining("请选择“gateway-telegram-"),
       format: "plain_text",
       inlineKeyboard: [[{ text: "abcdef12 · Example", callbackData: "thread:abcdef12-full" }]],
     });
@@ -183,15 +211,42 @@ describe("TelegramService", () => {
     expect(state.getActiveThread("telegram", "42", "9")).toBe("abcdef12-full");
     expect(api.callbackAnswers.at(-1)).toEqual({
       queryId: "callback-1",
-      text: "Switched to and watching abcdef12.",
+      text: "已切换并关注任务 abcdef12。",
     });
     expect(api.edits[1]).toMatchObject({
       ref: { chatId: 42, messageId: "100", topicId: "9" },
-      content: "✅ Switched to and watching abcdef12.",
+      content: "✅ 已切换并关注任务 abcdef12。",
       format: "plain_text",
       inlineKeyboard: [],
     });
     expect(state.getThreadWatch("telegram", "42", "9")?.codexThreadId).toBe("abcdef12-full");
+  });
+
+  it("opens the allowed task picker from an unbound notification action", async () => {
+    codex.listThreads.mockResolvedValue({
+      data: [{ id: "projectless-thread", cwd: directory, name: "Quick task", preview: "" }],
+      nextCursor: null,
+      backwardsCursor: null,
+    });
+
+    await service.handleCallbackQuery(callbackQuery({ data: "threads", messageId: "60" }));
+
+    expect(api.callbackAnswers.at(-1)).toEqual({ queryId: "callback-1", text: undefined });
+    expect(api.sent[0]).toMatchObject({
+      content: "请选择项目：",
+      inlineKeyboard: [[{ text: "📋 其他任务", callbackData: "project:none" }]],
+    });
+    expect(api.edits).toHaveLength(0);
+  });
+
+  it("rejects malformed task-picker callback data", async () => {
+    await service.handleCallbackQuery(callbackQuery({ data: "threads:unexpected" }));
+
+    expect(codex.listThreads).not.toHaveBeenCalled();
+    expect(api.callbackAnswers.at(-1)).toEqual({
+      queryId: "callback-1",
+      text: "不支持此操作。",
+    });
   });
 
   it("groups allowed threads without a Git project under Tasks", async () => {
@@ -204,14 +259,14 @@ describe("TelegramService", () => {
     await service.handleMessage(message({ text: "/threads" }));
 
     expect(api.sent[0]?.inlineKeyboard).toEqual([
-      [{ text: "📋 Tasks", callbackData: "project:none" }],
+      [{ text: "📋 其他任务", callbackData: "project:none" }],
     ]);
 
     await service.handleCallbackQuery(callbackQuery({ data: "project:none" }));
 
     expect(api.sent).toHaveLength(1);
     expect(api.edits[0]).toMatchObject({
-      content: "Select a thread in Tasks:",
+      content: "请选择“其他任务”中的任务：",
       format: "plain_text",
       inlineKeyboard: [
         [{ text: "projectl · Quick task", callbackData: "thread:projectless-thread" }],
@@ -226,7 +281,7 @@ describe("TelegramService", () => {
 
     expect(api.sent).toHaveLength(0);
     expect(api.edits[0]).toMatchObject({
-      content: "No available threads in Tasks.",
+      content: "“其他任务”中没有可用任务。",
       format: "plain_text",
       inlineKeyboard: [],
     });
@@ -258,7 +313,7 @@ describe("TelegramService", () => {
       expect(api.sent[0]?.inlineKeyboard?.map((row) => row[0]?.text)).toEqual([
         expect.stringContaining("gateway-telegram-"),
         expect.stringContaining("gateway-financial-"),
-        "📋 Tasks",
+        "📋 其他任务",
       ]);
     } finally {
       await rm(secondDirectory, { force: true, recursive: true });
@@ -271,7 +326,7 @@ describe("TelegramService", () => {
     await service.handleCallbackQuery(callbackQuery({ data: "thread:outside-thread" }));
 
     expect(state.getActiveThread("telegram", "42")).toBeNull();
-    expect(api.callbackAnswers.at(-1)?.text).toBe("Thread is not available.");
+    expect(api.callbackAnswers.at(-1)?.text).toBe("此任务不可用。");
   });
 
   it("answers request_user_input from an exact one-time Telegram task card", async () => {
@@ -319,8 +374,8 @@ describe("TelegramService", () => {
     expect(api.edits.some((edit) => edit.content.includes("Input sent to Codex"))).toBe(true);
     expect(api.edits.at(-1)?.content).not.toContain("Reply to continue");
     expect(api.edits.at(-1)?.inlineKeyboard?.[0]?.map((button) => button.text)).toEqual([
-      "Switch",
-      "Mute",
+      "切换到此任务",
+      "停止通知",
     ]);
 
     await service.handleCallbackQuery(
@@ -385,6 +440,10 @@ class FakeTelegramApi implements TelegramApi {
     inlineKeyboard?: readonly (readonly TelegramInlineButton[])[];
   }> = [];
   readonly callbackAnswers: Array<{ queryId: string; text?: string }> = [];
+  readonly keyboardEdits: Array<{
+    ref: TelegramMessageRef;
+    inlineKeyboard: readonly (readonly TelegramInlineButton[])[];
+  }> = [];
 
   async sendTextMessage(
     chatId: number,
@@ -428,6 +487,13 @@ class FakeTelegramApi implements TelegramApi {
       format: "rich_markdown",
       ...(inlineKeyboard ? { inlineKeyboard } : {}),
     });
+  }
+
+  async editMessageKeyboard(
+    ref: TelegramMessageRef,
+    inlineKeyboard: readonly (readonly TelegramInlineButton[])[],
+  ): Promise<void> {
+    this.keyboardEdits.push({ ref, inlineKeyboard });
   }
 
   private recordSent(

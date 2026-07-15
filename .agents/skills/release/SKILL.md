@@ -14,9 +14,10 @@ Do not claim success unless local application and remote CI both succeed.
 2. Inspect `git status --short`, the current branch, remotes, upstream, and any in-progress
    merge or rebase. Stop for unresolved conflicts, a detached HEAD, missing `origin`, or missing
    GitHub authentication.
-3. Review tracked and untracked changes. Never include `.env`, credentials, tokens, transcripts,
-   private workspace paths, or generated secrets. If unrelated user changes make the release
-   scope ambiguous, ask before staging them; never discard them.
+3. Review the tracked diff and the contents of every untracked file, not only their names. Never
+   include `.env`, credentials, tokens, transcripts, private workspace paths, or generated secrets.
+   If unrelated user changes make the release scope ambiguous, ask before staging them; never
+   discard them.
 4. Fetch `origin`. If the current branch has an upstream, synchronize with
    `git pull --rebase --autostash` before changing the manifest. Resolve failures without rewriting
    published history.
@@ -26,7 +27,11 @@ Do not claim success unless local application and remote CI both succeed.
 1. Run `node .agents/skills/release/scripts/update-cachebuster.mjs .`. This replaces the manifest build
    suffix with `+codex.<UTC timestamp>` while preserving the base version. Do this before checks
    and commit so the locally installed version is also the committed, CI-tested version.
-2. Run the same verification contract as `.github/workflows/ci.yml`:
+2. Inspect `.github/workflows/ci.yml` and `package.json`, then compare the local Node and pnpm
+   versions with the versions declared by CI. Run CI with its declared tool versions without
+   changing repository configuration merely to hide an existing version mismatch. If the exact
+   CI toolchain cannot be used, stop and report the drift; do not describe a different toolchain
+   as a local reproduction. With the matching toolchain, run the workflow's verification commands:
 
    ```bash
    pnpm install --frozen-lockfile
@@ -35,14 +40,19 @@ Do not claim success unless local application and remote CI both succeed.
 
 3. Stop immediately on failure. Fix only issues within the requested release scope, rerun the
    complete check, and do not push a failing tree.
-4. Inspect `git diff --check`, `git diff --stat`, and the full diff after checks. Confirm the
-   cachebuster is the only mechanical release mutation and no check produced unintended files.
+4. Inspect `git diff --check`, `git status --short`, and `git diff --stat` after checks. Compare the
+   resulting file inventory with the scope already reviewed in stage 1. Confirm the cachebuster is
+   the only mechanical release mutation and no check produced unintended files; re-read content
+   here only for new or unexpectedly changed paths, because the authoritative full patch review
+   happens after staging.
 
 ## 3. Commit and push
 
 1. Stage the agreed release scope. Use `git add -A` only after confirming every current change
    belongs in this release.
-2. Review `git diff --cached --check`, `git diff --cached --stat`, and the staged diff.
+2. Review `git diff --cached --check`, `git diff --cached --stat`, and the complete staged diff.
+   Treat this as the authoritative release patch: it includes newly added files and must exactly
+   match the agreed scope.
 3. Create a concise Conventional Commit message that describes the substantive change. Use
    `chore(release): refresh plugin build` only when the cachebuster is the sole change. Do not amend
    or bypass hooks.
@@ -56,9 +66,12 @@ Do not claim success unless local application and remote CI both succeed.
 
 Local application must use the marketplace entry that already points at this checkout.
 
-1. Read `codex plugin list --available --json`. Find exactly one `codex-im-gateway` entry whose
-   source path resolves to the current repository root and whose marketplace source is local. Do
-   not edit marketplace JSON or Codex config by hand.
+1. Read `codex plugin list --available --json`, but filter the JSON before displaying it so only
+   `codex-im-gateway` entries consume context. Also read `codex plugin marketplace list --json`.
+   Find exactly one entry whose `source.source` is `local`, whose source path resolves through
+   `realpath` to the current repository root, and whose marketplace has a local filesystem root
+   that contains that source path. Do not infer identity from the plugin name alone, and do not
+   edit marketplace JSON or Codex config by hand.
 2. If no exact local source match exists, record local application as failed and continue to CI
    monitoring; do not install a similarly named or remote plugin.
 3. Reinstall from the matched marketplace:
@@ -82,9 +95,10 @@ Local application must use the marketplace entry that already points at this che
    ```
 
 2. GitHub may take time to create the run. Poll briefly until a run with
-   `headSha == release_sha` appears. The workflow runs for pushes to `main` and pull requests. If
-   the branch has neither trigger, report that no CI run is expected instead of watching an
-   unrelated run.
+   `headSha == release_sha` appears. Determine triggers from the current workflow rather than
+   assuming every branch push creates a run. If no matching run is expected, report the release
+   as incomplete because remote CI did not succeed; never watch an unrelated run or imply that the
+   pushed commit was rolled back.
 3. Watch the selected run to a terminal state:
 
    ```bash
@@ -103,3 +117,6 @@ Report all of the following in the final response:
 - CI run URL and terminal conclusion, or the precise reason no matching run exists;
 - the required new-task pickup step;
 - any partial failure after the push, without implying that the remote commit was rolled back.
+
+Call the release successful only when both exact local application and the matching remote CI run
+succeed. A missing or non-triggered CI run is an incomplete release, not a successful one.

@@ -2,7 +2,6 @@ import { access, readFile } from "node:fs/promises";
 
 const manifest = JSON.parse(await readFile(".codex-plugin/plugin.json", "utf8"));
 const deliverySkill = await readFile("skills/telegram-delivery/SKILL.md", "utf8");
-const releaseSkill = await readFile("skills/release/SKILL.md", "utf8");
 const builtMcpServer = await readFile("dist/mcp/server.js", "utf8");
 const builtDaemon = await readFile("dist/daemon.js", "utf8");
 
@@ -20,15 +19,10 @@ await Promise.all([
   access(".mcp.json"),
   access("skills/gateway/SKILL.md"),
   access("skills/telegram-delivery/SKILL.md"),
-  access("skills/release/SKILL.md"),
-  access("skills/release/scripts/update-cachebuster.mjs"),
 ]);
 
 assert(deliverySkill.includes("telegram_deliver"), "delivery skill must name the MCP tool");
 assert(deliverySkill.includes("exactly once"), "delivery skill must require one final enqueue");
-assert(releaseSkill.includes("pnpm check"), "release skill must reproduce the CI check");
-assert(releaseSkill.includes("gh run watch"), "release skill must monitor GitHub Actions");
-assert(releaseSkill.includes("codex plugin add"), "release skill must apply the local plugin");
 assert(
   deliverySkill.includes("GFM-compatible Rich"),
   "delivery skill must define Rich Markdown input",

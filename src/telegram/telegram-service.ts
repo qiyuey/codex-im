@@ -9,6 +9,7 @@ import type {
 import type { ToolRequestUserInputAnswer } from "../codex/protocol/v2/ToolRequestUserInputAnswer.js";
 import { ThreadQueue } from "../concurrency/thread-queue.js";
 import type { RuntimeConfig } from "../config/runtime-config.js";
+import { type GatewayLanguage, type MessageKey, translate } from "../core/i18n.js";
 import { routeMessage } from "../router/router.js";
 import { isWorkspaceAllowed } from "../security/workspace.js";
 import type { GatewayStateStore } from "../storage/gateway-state-store.js";
@@ -129,11 +130,11 @@ export class TelegramService {
       return;
     }
     if (query.data === THREAD_PICKER_BACK_CALLBACK_DATA) {
-      await this.closeThreadPicker(query, "已返回。");
+      await this.closeThreadPicker(query, this.text("returned"));
       return;
     }
     if (query.data === THREAD_PICKER_CANCEL_CALLBACK_DATA) {
-      await this.closeThreadPicker(query, "已取消选择任务。");
+      await this.closeThreadPicker(query, this.text("cancelledPicker"));
       return;
     }
     if (query.data.startsWith(PROJECT_CALLBACK_PREFIX)) {
@@ -153,7 +154,7 @@ export class TelegramService {
       return;
     }
     if (!query.data.startsWith(THREAD_CALLBACK_PREFIX)) {
-      await this.api.answerCallbackQuery(query.queryId, "不支持此操作。");
+      await this.api.answerCallbackQuery(query.queryId, this.text("unsupportedAction"));
       return;
     }
     const threadId = query.data.slice(THREAD_CALLBACK_PREFIX.length);
@@ -175,13 +176,13 @@ export class TelegramService {
     replaceSourceMessage: boolean,
   ): Promise<void> {
     if (!threadId) {
-      await this.api.answerCallbackQuery(query.queryId, "此任务已不可用。");
+      await this.api.answerCallbackQuery(query.queryId, this.text("taskUnavailable"));
       return;
     }
     try {
       const resumed = await this.appServer.resumeThread(threadId);
       if (!(await isWorkspaceAllowed(resumed.cwd, this.config.allowedWorkspaces))) {
-        await this.api.answerCallbackQuery(query.queryId, "此任务不可用。");
+        await this.api.answerCallbackQuery(query.queryId, this.text("taskUnavailable"));
         return;
       }
       const snapshot = await this.appServer.readThreadSnapshot(threadId);
@@ -194,7 +195,7 @@ export class TelegramService {
       );
       await this.api.answerCallbackQuery(
         query.queryId,
-        `已切换并关注任务 ${threadId.slice(0, 8)}。`,
+        this.text("switchedAndWatching", { thread: threadId.slice(0, 8) }),
       );
       if (replaceSourceMessage) {
         await this.api
@@ -204,24 +205,24 @@ export class TelegramService {
               messageId: query.messageId,
               topicId: query.topicId,
             },
-            `✅ 已切换并关注任务 ${threadId.slice(0, 8)}。`,
+            `✅ ${this.text("switchedAndWatching", { thread: threadId.slice(0, 8) })}`,
             [],
           )
           .catch(() => undefined);
       }
     } catch {
-      await this.api.answerCallbackQuery(query.queryId, "此任务已不可用。");
+      await this.api.answerCallbackQuery(query.queryId, this.text("taskUnavailable"));
     }
   }
 
   private async handleMuteCallback(query: TelegramCallbackQuery, threadId: string): Promise<void> {
     const watch = this.state.getThreadWatch("telegram", String(query.chatId), query.topicId);
     if (!watch || watch.codexThreadId !== threadId) {
-      await this.api.answerCallbackQuery(query.queryId, "此任务当前未被关注。");
+      await this.api.answerCallbackQuery(query.queryId, this.text("taskNotWatched"));
       return;
     }
     this.state.clearThreadWatch("telegram", String(query.chatId), query.topicId);
-    await this.api.answerCallbackQuery(query.queryId, "已停止此任务的完成通知，仍保持为当前任务。");
+    await this.api.answerCallbackQuery(query.queryId, this.text("mutedKeepCurrent"));
     await this.api
       .editMessageKeyboard(
         {
@@ -229,7 +230,7 @@ export class TelegramService {
           messageId: query.messageId,
           topicId: query.topicId,
         },
-        taskSwitchKeyboard(threadId),
+        taskSwitchKeyboard(threadId, this.config.language),
       )
       .catch(() => undefined);
   }
@@ -246,7 +247,7 @@ export class TelegramService {
     if (request.params.questions.some((question) => question.isSecret)) {
       await this.api.sendTextMessage(
         context.ref.chatId,
-        "🔒 Codex requested secret input. For safety, secrets cannot be answered through Telegram.",
+        this.text("secretInput"),
         context.ref.topicId,
       );
       this.appServer.rejectUserInput(request.id, "Secret input is not supported through Telegram");
@@ -306,6 +307,7 @@ export class TelegramService {
         question,
         index: pending.questionIndex,
         total: pending.request.params.questions.length,
+        language: this.config.language,
       }),
       pending.context.ref.topicId,
       keyboard?.length ? keyboard : undefined,
@@ -333,7 +335,7 @@ export class TelegramService {
       !Number.isSafeInteger(optionIndex) ||
       Date.now() >= pending.expiresAt
     ) {
-      await this.api.answerCallbackQuery(query.queryId, "This input request has expired.");
+      await this.api.answerCallbackQuery(query.queryId, this.text("inputRequestExpired"));
       return;
     }
     if (
@@ -342,17 +344,17 @@ export class TelegramService {
       pending.promptRef?.messageId !== query.messageId ||
       pending.questionIndex !== questionIndex
     ) {
-      await this.api.answerCallbackQuery(query.queryId, "This question is no longer active.");
+      await this.api.answerCallbackQuery(query.queryId, this.text("questionInactive"));
       return;
     }
     const question = pending.request.params.questions[questionIndex];
     const option = question?.options?.[optionIndex];
     if (!question || !option) {
-      await this.api.answerCallbackQuery(query.queryId, "This option is no longer available.");
+      await this.api.answerCallbackQuery(query.queryId, this.text("optionUnavailable"));
       return;
     }
 
-    await this.api.answerCallbackQuery(query.queryId, "Answer recorded.");
+    await this.api.answerCallbackQuery(query.queryId, this.text("answerRecorded"));
     await this.submitPendingAnswer(pending, option.label);
   }
 
@@ -371,7 +373,7 @@ export class TelegramService {
     ) {
       await this.api.sendTextMessage(
         message.chatId,
-        "This input request has expired.",
+        this.text("inputRequestExpired"),
         message.topicId,
       );
       return true;
@@ -380,7 +382,7 @@ export class TelegramService {
     if (!answer) {
       await this.api.sendTextMessage(
         message.chatId,
-        "Please send a non-empty answer.",
+        this.text("sendNonEmptyAnswer"),
         message.topicId,
       );
       return true;
@@ -398,7 +400,11 @@ export class TelegramService {
     if (pending.questionIndex < pending.request.params.questions.length) {
       if (promptRef) {
         await this.api
-          .editTextMessage(promptRef, renderUserInputAnswered(question, answer), [])
+          .editTextMessage(
+            promptRef,
+            renderUserInputAnswered(question, answer, this.config.language),
+            [],
+          )
           .catch(() => undefined);
       }
       try {
@@ -418,14 +424,18 @@ export class TelegramService {
       this.cleanupPendingInput(pending);
       if (promptRef) {
         await this.api
-          .editTextMessage(promptRef, renderUserInputAnswered(question, answer), [])
+          .editTextMessage(
+            promptRef,
+            renderUserInputAnswered(question, answer, this.config.language),
+            [],
+          )
           .catch(() => undefined);
       }
     } catch {
       this.cleanupPendingInput(pending);
       if (promptRef) {
         await this.api
-          .editTextMessage(promptRef, "❌ The answer could not be sent to Codex.", [])
+          .editTextMessage(promptRef, this.text("answerCouldNotBeSent"), [])
           .catch(() => undefined);
       }
     }
@@ -462,7 +472,7 @@ export class TelegramService {
     }
     if (pending.promptRef) {
       void this.api
-        .editTextMessage(pending.promptRef, "⌛ This Codex input request is no longer active.", [])
+        .editTextMessage(pending.promptRef, this.text("codexInputExpired"), [])
         .catch(() => undefined);
     }
   }
@@ -486,15 +496,21 @@ export class TelegramService {
     const project = catalog.projects.find((candidate) => candidate.id === projectId);
     const threads = projectId === NO_PROJECT_ID ? catalog.noProjectThreads : project?.threads;
     if (!threads) {
-      await this.api.answerCallbackQuery(query.queryId, "此项目已不可用。");
+      await this.api.answerCallbackQuery(query.queryId, this.text("projectUnavailable"));
       return;
     }
 
     await this.api.answerCallbackQuery(query.queryId);
-    const label = project?.label ?? "其他任务";
-    const text = threads.length ? `请选择“${label}”中的任务：` : `“${label}”中没有可用任务。`;
-    const keyboard = threads.slice(0, 10).map((thread) => [threadButton(thread)]);
-    keyboard.push(threadPickerNavigationRow(THREAD_PICKER_PROJECTS_CALLBACK_DATA));
+    const label = project?.label ?? this.text("otherTasks");
+    const text = threads.length
+      ? this.text("chooseTaskInProject", { project: label })
+      : this.text("noProjectTasks", { project: label });
+    const keyboard = threads
+      .slice(0, 10)
+      .map((thread) => [threadButton(thread, this.config.language)]);
+    keyboard.push(
+      threadPickerNavigationRow(THREAD_PICKER_PROJECTS_CALLBACK_DATA, this.config.language),
+    );
     await this.api.editTextMessage(
       {
         chatId: query.chatId,
@@ -553,8 +569,12 @@ export class TelegramService {
       await this.api.sendTextMessage(
         message.chatId,
         active
-          ? `Current thread: ${active} (${watch?.codexThreadId === active ? "watching" : "muted"})`
-          : "No thread selected.",
+          ? this.text("currentThread", {
+              thread: active,
+              watchState:
+                watch?.codexThreadId === active ? this.text("watching") : this.text("muted"),
+            })
+          : this.text("noThreadSelected"),
         message.topicId,
       );
       return;
@@ -563,7 +583,7 @@ export class TelegramService {
       const detached = this.state.detach("telegram", String(message.chatId), message.topicId);
       await this.api.sendTextMessage(
         message.chatId,
-        detached ? "Thread detached and notifications muted." : "No thread was selected.",
+        detached ? this.text("threadDetached") : this.text("noThreadSelected"),
         message.topicId,
       );
       return;
@@ -576,7 +596,7 @@ export class TelegramService {
       );
       await this.api.sendTextMessage(
         message.chatId,
-        muted ? "Thread notifications muted." : "No watched thread.",
+        muted ? this.text("notificationsMuted") : this.text("noWatchedThread"),
         message.topicId,
       );
       return;
@@ -587,18 +607,14 @@ export class TelegramService {
     }
     if (command === "use") {
       if (!argument) {
-        await this.api.sendTextMessage(
-          message.chatId,
-          "Usage: <code>/use &lt;thread&gt;</code>",
-          message.topicId,
-        );
+        await this.api.sendTextMessage(message.chatId, this.text("usageUse"), message.topicId);
         return;
       }
       const thread = await this.resolveThread(argument);
       if (!thread) {
         await this.api.sendTextMessage(
           message.chatId,
-          "Thread not found or workspace is not allowed.",
+          this.text("threadNotFound"),
           message.topicId,
         );
         return;
@@ -615,14 +631,14 @@ export class TelegramService {
       } catch {
         await this.api.sendTextMessage(
           message.chatId,
-          "Thread is no longer available.",
+          this.text("threadUnavailable"),
           message.topicId,
         );
         return;
       }
       await this.api.sendTextMessage(
         message.chatId,
-        `Using and watching ${thread.id}.`,
+        this.text("usingAndWatching", { thread: thread.id }),
         message.topicId,
       );
       return;
@@ -639,7 +655,7 @@ export class TelegramService {
       );
       await this.api.sendTextMessage(
         message.chatId,
-        `Created and watching ${response.thread.id}.`,
+        this.text("createdAndWatching", { thread: response.thread.id }),
         message.topicId,
       );
       return;
@@ -654,18 +670,12 @@ export class TelegramService {
       const stopped = active ? await this.appServer.interruptThread(active) : false;
       await this.api.sendTextMessage(
         message.chatId,
-        stopped || cancelled
-          ? "Interrupt requested; queued follow-ups cancelled."
-          : "No active turn to stop.",
+        stopped || cancelled ? this.text("interruptRequested") : this.text("noActiveTurn"),
         message.topicId,
       );
       return;
     }
-    await this.api.sendTextMessage(
-      message.chatId,
-      "Commands: /threads /use /current /new /mute /detach /stop",
-      message.topicId,
-    );
+    await this.api.sendTextMessage(message.chatId, this.text("commandList"), message.topicId);
   }
 
   private async handlePrompt(message: TelegramMessage): Promise<void> {
@@ -685,8 +695,8 @@ export class TelegramService {
     if (decision.kind === "error") {
       const text =
         decision.code === "unknown_reply"
-          ? "这条消息未关联可继续对话的 Codex 任务。请先使用 /threads 选择对应任务，再发送一条新消息；不要继续引用回复这条通知。"
-          : "尚未选择 Codex 任务。请使用 /threads（或 /use）选择任务，或使用 /new 创建任务。";
+          ? this.text("unknownReply")
+          : this.text("noThreadSelectedHelp");
       await this.api.sendTextMessage(message.chatId, text, message.topicId);
       return;
     }
@@ -695,7 +705,7 @@ export class TelegramService {
     if (!(await isWorkspaceAllowed(resumed.cwd, this.config.allowedWorkspaces))) {
       await this.api.sendTextMessage(
         message.chatId,
-        "That thread's workspace is not allowed.",
+        this.text("workspaceNotAllowed"),
         message.topicId,
       );
       return;
@@ -703,7 +713,7 @@ export class TelegramService {
 
     const placeholder = await this.api.sendTextMessage(
       message.chatId,
-      "⏳ Codex is working…",
+      `⏳ ${this.text("codexWorking")}`,
       message.topicId,
     );
     this.state.bindMessage("telegram", chatId, placeholder.messageId, decision.threadId, "pending");
@@ -723,7 +733,12 @@ export class TelegramService {
     placeholder: TelegramMessageRef,
     cwd: string,
   ): Promise<void> {
-    const editor = new StreamingEditor(this.api, placeholder, this.editDebounceMs);
+    const editor = new StreamingEditor(
+      this.api,
+      placeholder,
+      this.editDebounceMs,
+      this.config.language,
+    );
     const context = { ref: placeholder, cwd } satisfies ActiveTurnContext;
     this.activeTurnContexts.set(threadId, context);
     try {
@@ -792,7 +807,12 @@ export class TelegramService {
 
   private async sendThreadProjectPicker(chatId: number, topicId: string | null): Promise<void> {
     const catalog = await this.loadThreadProjectCatalog();
-    await this.api.sendTextMessage(chatId, "请选择项目：", topicId, threadProjectKeyboard(catalog));
+    await this.api.sendTextMessage(
+      chatId,
+      this.text("chooseProject"),
+      topicId,
+      threadProjectKeyboard(catalog, this.config.language),
+    );
   }
 
   private async editThreadProjectPicker(query: TelegramCallbackQuery): Promise<void> {
@@ -803,8 +823,8 @@ export class TelegramService {
         messageId: query.messageId,
         topicId: query.topicId,
       },
-      "请选择项目：",
-      threadProjectKeyboard(catalog),
+      this.text("chooseProject"),
+      threadProjectKeyboard(catalog, this.config.language),
     );
   }
 
@@ -819,6 +839,10 @@ export class TelegramService {
       text,
       [],
     );
+  }
+
+  private text(key: MessageKey, values: Readonly<Record<string, string | number>> = {}): string {
+    return translate(this.config.language, key, values);
   }
 }
 
@@ -845,6 +869,7 @@ class StreamingEditor {
     private readonly api: TelegramApi,
     private readonly ref: TelegramMessageRef,
     private readonly debounceMs: number,
+    private readonly language: GatewayLanguage,
   ) {}
 
   update(text: string): void {
@@ -853,7 +878,7 @@ class StreamingEditor {
     this.timer = setTimeout(() => {
       this.timer = null;
       void this.api
-        .editRichMessage(this.ref, renderStreaming(this.text, false))
+        .editRichMessage(this.ref, renderStreaming(this.text, false, this.language))
         .catch(() => undefined);
     }, this.debounceMs);
   }
@@ -863,18 +888,21 @@ class StreamingEditor {
     this.timer = null;
     await this.api.editRichMessage(
       this.ref,
-      renderCompletion({
-        ...result,
-        finalMessage: result.finalMessage || this.text,
-      }),
-      taskActionKeyboard(result.threadId),
+      renderCompletion(
+        {
+          ...result,
+          finalMessage: result.finalMessage || this.text,
+        },
+        this.language,
+      ),
+      taskActionKeyboard(result.threadId, this.language),
     );
   }
 
   async fail(): Promise<void> {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
-    await this.api.editTextMessage(this.ref, "❌ Codex turn failed. Check the local gateway logs.");
+    await this.api.editTextMessage(this.ref, translate(this.language, "turnFailed"));
   }
 }
 
@@ -884,14 +912,16 @@ function parseCommand(text: string): { name: string; argument: string } | null {
   return name ? { name: name.toLowerCase(), argument: match[2]?.trim() ?? "" } : null;
 }
 
-function threadButton(thread: ProjectThread) {
+function threadButton(thread: ProjectThread, language: GatewayLanguage) {
   return {
-    text: `${thread.id.slice(0, 8)} · ${(thread.name ?? (thread.preview || "Untitled")).slice(0, 48)}`,
+    text: `${thread.id.slice(0, 8)} · ${(
+      thread.name ?? (thread.preview || translate(language, "untitled"))
+    ).slice(0, 48)}`,
     callbackData: `${THREAD_CALLBACK_PREFIX}${thread.id}`,
   };
 }
 
-function threadProjectKeyboard(catalog: ThreadProjectCatalog) {
+function threadProjectKeyboard(catalog: ThreadProjectCatalog, language: GatewayLanguage) {
   const keyboard = catalog.projects.slice(0, 20).map((project) => [
     {
       text: `📁 ${project.label}`,
@@ -900,18 +930,18 @@ function threadProjectKeyboard(catalog: ThreadProjectCatalog) {
   ]);
   keyboard.push([
     {
-      text: "📋 其他任务",
+      text: `📋 ${translate(language, "otherTasks")}`,
       callbackData: `${PROJECT_CALLBACK_PREFIX}${NO_PROJECT_ID}`,
     },
   ]);
-  keyboard.push(threadPickerNavigationRow(THREAD_PICKER_BACK_CALLBACK_DATA));
+  keyboard.push(threadPickerNavigationRow(THREAD_PICKER_BACK_CALLBACK_DATA, language));
   return keyboard;
 }
 
-function threadPickerNavigationRow(backCallbackData: string) {
+function threadPickerNavigationRow(backCallbackData: string, language: GatewayLanguage) {
   return [
-    { text: "⬅️ 返回", callbackData: backCallbackData },
-    { text: "✖️ 取消", callbackData: THREAD_PICKER_CANCEL_CALLBACK_DATA },
+    { text: translate(language, "back"), callbackData: backCallbackData },
+    { text: translate(language, "cancelled"), callbackData: THREAD_PICKER_CANCEL_CALLBACK_DATA },
   ];
 }
 

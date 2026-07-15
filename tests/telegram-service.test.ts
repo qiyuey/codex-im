@@ -39,6 +39,7 @@ beforeEach(async () => {
     telegramAllowedChatId: 42,
     allowedWorkspaces: [directory],
     dispatchIntervalMs: 100,
+    language: "zh",
   };
   service = new TelegramService(config, api, state, codex as unknown as TelegramCodexService, 0);
 });
@@ -50,6 +51,16 @@ afterEach(async () => {
 });
 
 describe("TelegramService", () => {
+  it("renders command UI in English mode", async () => {
+    await service.drain();
+    config = { ...config, language: "en" };
+    service = new TelegramService(config, api, state, codex as unknown as TelegramCodexService, 0);
+
+    await service.handleMessage(message({ text: "/current" }));
+
+    expect(api.sent.at(-1)?.content).toBe("No task selected.");
+  });
+
   it("silently ignores unauthorized users and non-private chats", async () => {
     await service.handleMessage(message({ userId: 999 }));
     await service.handleMessage(message({ chatType: "group" }));
@@ -96,7 +107,7 @@ describe("TelegramService", () => {
     await service.handleMessage(message({ replyToMessageId: "50" }));
 
     expect(codex.runTurn).not.toHaveBeenCalled();
-    expect(api.sent[0]?.content).toContain("workspace is not allowed");
+    expect(api.sent[0]?.content).toContain("工作区不在允许范围内");
   });
 
   it("creates and selects a workspace-scoped thread", async () => {
@@ -389,7 +400,7 @@ describe("TelegramService", () => {
     await service.handleCallbackQuery(callbackQuery({ data: "thread:outside-thread" }));
 
     expect(state.getActiveThread("telegram", "42")).toBeNull();
-    expect(api.callbackAnswers.at(-1)?.text).toBe("此任务不可用。");
+    expect(api.callbackAnswers.at(-1)?.text).toBe("此任务已不可用。");
   });
 
   it("answers request_user_input from an exact one-time Telegram task card", async () => {
@@ -420,7 +431,7 @@ describe("TelegramService", () => {
     const optionButton = questionCard?.inlineKeyboard?.[0]?.[0];
     if (!questionCard || !optionButton) throw new Error("Expected a Telegram input card");
 
-    expect(questionCard.content).toContain("Waiting for input");
+    expect(questionCard.content).toContain("等待输入");
     expect(questionCard.format).toBe("plain_text");
     expect(optionButton.text).toBe("Safe");
     await service.handleCallbackQuery(
@@ -434,7 +445,7 @@ describe("TelegramService", () => {
     expect(codex.respondToUserInput).toHaveBeenCalledWith("request-1", {
       answers: { choice: { answers: ["Safe"] } },
     });
-    expect(api.edits.some((edit) => edit.content.includes("Input sent to Codex"))).toBe(true);
+    expect(api.edits.some((edit) => edit.content.includes("已将输入发送给 Codex"))).toBe(true);
     expect(api.edits.at(-1)?.content).not.toContain("Reply to continue");
     expect(api.edits.at(-1)?.inlineKeyboard?.[0]?.map((button) => button.text)).toEqual([
       "切换到此任务",
@@ -447,7 +458,7 @@ describe("TelegramService", () => {
         data: optionButton.callbackData,
       }),
     );
-    expect(api.callbackAnswers.at(-1)?.text).toBe("This input request has expired.");
+    expect(api.callbackAnswers.at(-1)?.text).toBe("此输入请求已过期。");
   });
 
   it("accepts free-form input only as a reply to the exact request card", async () => {

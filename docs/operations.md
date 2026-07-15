@@ -19,6 +19,12 @@ repository as a local Codex plugin through a trusted local marketplace. Start a
 new Codex task after installing or refreshing the plugin so its skills and MCP
 server load.
 
+Set `CODEX_IM_GATEWAY_LANGUAGE=zh` for Chinese gateway UI or
+`CODEX_IM_GATEWAY_LANGUAGE=en` for English. Chinese is the default. The setting
+applies to Telegram command descriptions, buttons, task cards, pickers, input
+requests, and gateway status/error messages after the daemon restarts. Codex
+answers and caller-provided notification titles/messages are not translated.
+
 Telegram delivery is explicit. A task prompt must invoke `$telegram-delivery`
 and require it as the final workflow step. The task workspace must be within
 `CODEX_IM_GATEWAY_ALLOWED_WORKSPACES`; otherwise the daemon moves the notification

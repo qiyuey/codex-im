@@ -44,6 +44,7 @@ describe("Telegram result senders", () => {
     const sender = new TelegramNotificationSender(
       { sendRichMessage } as unknown as TelegramApi,
       42,
+      "en",
     );
 
     await sender.sendNotification({
@@ -69,7 +70,7 @@ describe("Telegram result senders", () => {
     expect(sendRichMessage.mock.calls[0]?.[1]).toContain("# 📬 Scheduled report");
     expect(sendRichMessage.mock.calls[0]?.[1]).toContain("## Final status");
     expect(sendRichMessage.mock.calls[0]?.[3]).toEqual([
-      [{ text: "选择任务", callbackData: "threads" }],
+      [{ text: "Choose task", callbackData: "threads" }],
     ]);
   });
 
@@ -89,6 +90,7 @@ describe("Telegram result senders", () => {
     const sender = new TelegramNotificationSender(
       { sendRichMessage } as unknown as TelegramApi,
       42,
+      "en",
     );
 
     await sender.sendNotification({
@@ -111,7 +113,7 @@ describe("Telegram result senders", () => {
     });
 
     expect(sendRichMessage.mock.calls[0]?.[3]).toEqual([
-      [{ text: "切换到此任务", callbackData: "switch:thread-2" }],
+      [{ text: "Switch to this task", callbackData: "switch:thread-2" }],
     ]);
   });
 });

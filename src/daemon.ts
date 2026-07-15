@@ -22,12 +22,20 @@ async function main(): Promise<void> {
   const notifications = new OutboundNotificationStore(database);
   const state = new GatewayStateStore(database);
   const appServer = new AppServerClient();
-  const telegram = new GrammyTelegramAdapter(config.telegramBotToken, config.telegramAllowedUserId);
+  const telegram = new GrammyTelegramAdapter(
+    config.telegramBotToken,
+    config.telegramAllowedUserId,
+    config.language,
+  );
   const killSwitch = new LocalKillSwitch();
   const service = new TelegramService(config, telegram, state, appServer, 750, () =>
     killSwitch.isInboundEnabled(),
   );
-  const sender = new TelegramCompletionSender(telegram, config.telegramAllowedChatId);
+  const sender = new TelegramCompletionSender(
+    telegram,
+    config.telegramAllowedChatId,
+    config.language,
+  );
   const dispatcher = new Dispatcher(
     events,
     state,
@@ -41,7 +49,7 @@ async function main(): Promise<void> {
   );
   const notificationDispatcher = new NotificationDispatcher(
     notifications,
-    new TelegramNotificationSender(telegram, config.telegramAllowedChatId),
+    new TelegramNotificationSender(telegram, config.telegramAllowedChatId, config.language),
     (cwd) => isWorkspaceAllowed(cwd, config.allowedWorkspaces),
     (notification, messageId) => {
       state.bindMessage(
@@ -53,8 +61,13 @@ async function main(): Promise<void> {
       );
     },
   );
-  const threadWatchMonitor = new ThreadWatchMonitor(state, appServer, telegram, (cwd) =>
-    isWorkspaceAllowed(cwd, config.allowedWorkspaces),
+  const threadWatchMonitor = new ThreadWatchMonitor(
+    state,
+    appServer,
+    telegram,
+    (cwd) => isWorkspaceAllowed(cwd, config.allowedWorkspaces),
+    5_000,
+    config.language,
   );
 
   let dispatching = false;

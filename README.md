@@ -75,11 +75,14 @@ Edit `.env` locally and set:
 - `TELEGRAM_ALLOWED_USER_ID`
 - `TELEGRAM_ALLOWED_CHAT_ID`
 - `CODEX_IM_GATEWAY_ALLOWED_WORKSPACES`
+- `CODEX_IM_GATEWAY_LANGUAGE` (`zh` or `en`; defaults to `zh`)
 
 `TELEGRAM_ALLOWED_CHAT_ID` must equal `TELEGRAM_ALLOWED_USER_ID`; only that
 identity's private chat is accepted. Never commit `.env`. Multiple workspace
 roots use the operating system path delimiter (`:` on macOS/Linux and `;` on
-Windows).
+Windows). The language setting localizes gateway-generated Telegram commands,
+buttons, task cards, pickers, input prompts, and status messages; Codex output
+and explicitly supplied notification content keep their original language.
 
 Install the checkout as a local Codex plugin, then start a new Codex task so its
 skills and MCP server are loaded. See the [operations guide](docs/operations.md)

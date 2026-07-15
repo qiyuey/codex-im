@@ -1,4 +1,5 @@
 import { Bot, GrammyError, HttpError } from "grammy";
+import { type GatewayLanguage, translate } from "../core/i18n.js";
 import type {
   TelegramApi,
   TelegramCallbackQuery,
@@ -7,15 +8,19 @@ import type {
   TelegramMessageRef,
 } from "./types.js";
 
-export const TELEGRAM_COMMANDS = [
-  { command: "threads", description: "Choose a Codex thread" },
-  { command: "use", description: "Select a thread by ID or prefix" },
-  { command: "current", description: "Show the current Codex thread" },
-  { command: "new", description: "Create and select a new thread" },
-  { command: "mute", description: "Mute watched-thread notifications" },
-  { command: "detach", description: "Clear the current thread selection" },
-  { command: "stop", description: "Stop the active turn and queued prompts" },
-] as const;
+export function telegramCommands(language: GatewayLanguage) {
+  return [
+    { command: "threads", description: translate(language, "commandThreads") },
+    { command: "use", description: translate(language, "commandUse") },
+    { command: "current", description: translate(language, "commandCurrent") },
+    { command: "new", description: translate(language, "commandNew") },
+    { command: "mute", description: translate(language, "commandMute") },
+    { command: "detach", description: translate(language, "commandDetach") },
+    { command: "stop", description: translate(language, "commandStop") },
+  ] as const;
+}
+
+export const TELEGRAM_COMMANDS = telegramCommands("zh");
 
 export class GrammyTelegramAdapter implements TelegramApi {
   private handler: ((message: TelegramMessage) => Promise<void>) | null = null;
@@ -24,6 +29,7 @@ export class GrammyTelegramAdapter implements TelegramApi {
   constructor(
     token: string,
     private readonly allowedUserId: number,
+    private readonly language: GatewayLanguage = "zh",
     private readonly bot: Bot = new Bot(token),
   ) {
     this.bot.on("message:text", async (context) => {
@@ -99,7 +105,7 @@ export class GrammyTelegramAdapter implements TelegramApi {
 
   async configureCommandMenu(chatId: number): Promise<void> {
     await Promise.all([
-      this.bot.api.setMyCommands(TELEGRAM_COMMANDS, {
+      this.bot.api.setMyCommands(telegramCommands(this.language), {
         scope: { type: "chat", chat_id: chatId },
       }),
       this.bot.api.setChatMenuButton({

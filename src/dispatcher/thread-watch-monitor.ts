@@ -1,4 +1,5 @@
 import type { CanonicalTurnResult, WatchedThreadSnapshot } from "../codex/app-server-client.js";
+import type { GatewayLanguage } from "../core/i18n.js";
 import type { GatewayStateStore, ThreadWatchRecord } from "../storage/gateway-state-store.js";
 import { renderCompletion, renderWatchedBlocked, taskActionKeyboard } from "../telegram/render.js";
 import type { TelegramApi } from "../telegram/types.js";
@@ -16,6 +17,7 @@ export class ThreadWatchMonitor {
     private readonly api: TelegramApi,
     private readonly workspaceAllowed: (cwd: string) => Promise<boolean> = async () => true,
     private readonly pollIntervalMs = 5_000,
+    private readonly language: GatewayLanguage = "zh",
   ) {}
 
   async initializeExistingSelections(): Promise<void> {
@@ -94,9 +96,9 @@ export class ThreadWatchMonitor {
   private async sendTurn(watch: ThreadWatchRecord, turn: CanonicalTurnResult): Promise<void> {
     const message = await this.api.sendRichMessage(
       Number(watch.chatId),
-      renderCompletion(turn),
+      renderCompletion(turn, this.language),
       watch.topicId,
-      taskActionKeyboard(turn.threadId),
+      taskActionKeyboard(turn.threadId, this.language),
     );
     this.state.bindMessage(
       watch.channel,
@@ -116,9 +118,9 @@ export class ThreadWatchMonitor {
     if (!blocked) return;
     const message = await this.api.sendRichMessage(
       Number(watch.chatId),
-      renderWatchedBlocked(snapshot),
+      renderWatchedBlocked(snapshot, this.language),
       watch.topicId,
-      taskActionKeyboard(snapshot.threadId),
+      taskActionKeyboard(snapshot.threadId, this.language),
     );
     this.state.bindMessage(
       watch.channel,

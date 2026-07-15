@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 
 const execFileAsync = promisify(execFile);
 const scriptPath = fileURLToPath(
-  new URL("../skills/release/scripts/update-cachebuster.mjs", import.meta.url),
+  new URL("../.agents/skills/release/scripts/update-cachebuster.mjs", import.meta.url),
 );
 
 async function makePlugin(version: string) {

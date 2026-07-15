@@ -4,21 +4,24 @@ import { prepareRichMarkdown } from "../src/telegram/rich-markdown.js";
 
 describe("Telegram rendering", () => {
   it("preserves Codex Markdown in streaming output", () => {
-    const rendered = renderStreaming("## Analysis\n\n- **Result**\n- `code`", false);
+    const rendered = renderStreaming("## Analysis\n\n- **Result**\n- `code`", false, "en");
     expect(rendered).toContain("## Analysis");
     expect(rendered).toContain("- **Result**");
     expect(rendered).toContain("- `code`");
   });
 
   it("renders a bound task card with the outcome first and compact context", () => {
-    const rendered = renderCompletion({
-      threadId: "thread-123456",
-      turnId: "turn-1",
-      status: "completed",
-      finalMessage: "Done.",
-      cwd: "/workspace/financial",
-      durationMs: 65_000,
-    });
+    const rendered = renderCompletion(
+      {
+        threadId: "thread-123456",
+        turnId: "turn-1",
+        status: "completed",
+        finalMessage: "Done.",
+        cwd: "/workspace/financial",
+        durationMs: 65_000,
+      },
+      "en",
+    );
 
     expect(rendered).toContain("# ✅ Task completed");
     expect(rendered).toContain(
@@ -29,25 +32,28 @@ describe("Telegram rendering", () => {
   });
 
   it("preserves explicit notification Markdown for Rich Messages", () => {
-    const rendered = renderNotification({
-      id: "notification-1",
-      idempotencyKey: "explicit:run-1",
-      channel: "telegram",
-      cwd: "/workspace/<private>",
-      title: "Report <done>",
-      message:
-        "## 最终状态\n\n**完成**\n\n- [产物](https://example.com/report?a=1&b=2)\n- `QC`: 通过\n\n| 项目 | 结果 |\n| --- | --- |\n| 测试 | 通过 |",
-      source: { kind: "notification_only" },
-      state: "queued",
-      attemptCount: 0,
-      nextAttemptAt: 0,
-      leaseExpiresAt: null,
-      leaseToken: null,
-      platformMessageId: null,
-      lastError: null,
-      createdAt: 0,
-      updatedAt: 0,
-    });
+    const rendered = renderNotification(
+      {
+        id: "notification-1",
+        idempotencyKey: "explicit:run-1",
+        channel: "telegram",
+        cwd: "/workspace/<private>",
+        title: "Report <done>",
+        message:
+          "## 最终状态\n\n**完成**\n\n- [产物](https://example.com/report?a=1&b=2)\n- `QC`: 通过\n\n| 项目 | 结果 |\n| --- | --- |\n| 测试 | 通过 |",
+        source: { kind: "notification_only" },
+        state: "queued",
+        attemptCount: 0,
+        nextAttemptAt: 0,
+        leaseExpiresAt: null,
+        leaseToken: null,
+        platformMessageId: null,
+        lastError: null,
+        createdAt: 0,
+        updatedAt: 0,
+      },
+      "zh",
+    );
 
     expect(rendered).toContain("# 📬 Report \\<done\\>");
     expect(rendered).toContain("## 最终状态");
@@ -56,13 +62,13 @@ describe("Telegram rendering", () => {
     expect(rendered).toContain("- `QC`: 通过");
     expect(rendered).toContain("| 项目 | 结果 |");
     expect(rendered).not.toContain("<b>");
-    expect(rendered).toContain("**Project:** `&lt;private&gt;`");
+    expect(rendered).toContain("**项目:** `&lt;private&gt;`");
     expect(rendered).toContain("这是一条独立通知");
     expect(rendered).toContain("请点击下方“选择任务”，再发送一条新消息");
   });
 
   it("does not emit unsafe Markdown links", () => {
-    const rendered = renderNotification(notificationFixture("[click](javascript:alert)"));
+    const rendered = renderNotification(notificationFixture("[click](javascript:alert)"), "en");
     expect(rendered).not.toContain("[click](javascript:alert)");
     expect(rendered).toContain("click (javascript:alert)");
   });
@@ -185,11 +191,28 @@ describe("Telegram rendering", () => {
       'const value = "<safe>";',
       "```",
     ].join("\n");
-    const rendered = renderNotification(notificationFixture(message));
+    const rendered = renderNotification(notificationFixture(message), "en");
 
     expect(rendered).toContain("> *Important*");
     expect(rendered).toContain("1. ~~obsolete~~");
     expect(rendered).toContain('```ts\nconst value = "&lt;safe&gt;";\n```');
+  });
+
+  it("renders the same task card in Chinese mode", () => {
+    const rendered = renderCompletion(
+      {
+        threadId: "thread-123456",
+        turnId: "turn-1",
+        status: "completed",
+        finalMessage: "完成。",
+        cwd: "/workspace/financial",
+        durationMs: 65_000,
+      },
+      "zh",
+    );
+
+    expect(rendered).toContain("# ✅ 任务已完成");
+    expect(rendered).toContain("**项目:** `financial` · **任务:** `thread-1` · **耗时:** 1m 5s");
   });
 
   it("caps Rich Markdown and closes a truncated code fence", () => {

@@ -17,7 +17,32 @@ describe("loadRuntimeConfig", () => {
       telegramAllowedChatId: 7,
       allowedWorkspaces: [resolve("./one"), resolve("./two")],
       dispatchIntervalMs: 250,
+      language: "zh",
     });
+  });
+
+  it("supports English mode", () => {
+    const config = loadRuntimeConfig({
+      TELEGRAM_BOT_TOKEN: "secret",
+      TELEGRAM_ALLOWED_USER_ID: "7",
+      TELEGRAM_ALLOWED_CHAT_ID: "7",
+      CODEX_IM_GATEWAY_ALLOWED_WORKSPACES: "./one",
+      CODEX_IM_GATEWAY_LANGUAGE: "en",
+    });
+
+    expect(config.language).toBe("en");
+  });
+
+  it("rejects unsupported languages", () => {
+    expect(() =>
+      loadRuntimeConfig({
+        TELEGRAM_BOT_TOKEN: "secret",
+        TELEGRAM_ALLOWED_USER_ID: "7",
+        TELEGRAM_ALLOWED_CHAT_ID: "7",
+        CODEX_IM_GATEWAY_ALLOWED_WORKSPACES: "./one",
+        CODEX_IM_GATEWAY_LANGUAGE: "fr",
+      }),
+    ).toThrow();
   });
 
   it("rejects missing credentials", () => {

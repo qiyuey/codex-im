@@ -1,6 +1,10 @@
 import type { Bot } from "grammy";
 import { describe, expect, it, vi } from "vitest";
-import { GrammyTelegramAdapter, TELEGRAM_COMMANDS } from "../src/telegram/grammy-adapter.js";
+import {
+  GrammyTelegramAdapter,
+  TELEGRAM_COMMANDS,
+  telegramCommands,
+} from "../src/telegram/grammy-adapter.js";
 
 describe("GrammyTelegramAdapter", () => {
   it("drops updates before routing unless they come from the sole allowed private user", async () => {
@@ -12,7 +16,7 @@ describe("GrammyTelegramAdapter", () => {
         handlers.set(event, handler);
       }),
     } as unknown as Bot;
-    const adapter = new GrammyTelegramAdapter("test-token", 7, bot);
+    const adapter = new GrammyTelegramAdapter("test-token", 7, "zh", bot);
     const onMessage = vi.fn(async () => undefined);
     adapter.onMessage(onMessage);
     const handleMessage = handlers.get("message:text");
@@ -44,7 +48,7 @@ describe("GrammyTelegramAdapter", () => {
       catch: vi.fn(),
       on: vi.fn(),
     } as unknown as Bot;
-    const adapter = new GrammyTelegramAdapter("test-token", 7, bot);
+    const adapter = new GrammyTelegramAdapter("test-token", 7, "zh", bot);
 
     await adapter.configureCommandMenu(42);
 
@@ -57,6 +61,23 @@ describe("GrammyTelegramAdapter", () => {
     });
   });
 
+  it("registers English command descriptions in English mode", async () => {
+    const setMyCommands = vi.fn(async () => true as const);
+    const bot = {
+      api: { setMyCommands, setChatMenuButton: vi.fn(async () => true as const) },
+      catch: vi.fn(),
+      on: vi.fn(),
+    } as unknown as Bot;
+    const adapter = new GrammyTelegramAdapter("test-token", 7, "en", bot);
+
+    await adapter.configureCommandMenu(42);
+
+    expect(setMyCommands).toHaveBeenCalledWith(telegramCommands("en"), {
+      scope: { type: "chat", chat_id: 42 },
+    });
+    expect(telegramCommands("en")[0]?.description).toBe("Choose a Codex task");
+  });
+
   it("sends plain text without parse mode and answers callback queries", async () => {
     const sendMessage = vi.fn(async () => ({ message_id: 12 }));
     const answerCallbackQuery = vi.fn(async () => true as const);
@@ -65,7 +86,7 @@ describe("GrammyTelegramAdapter", () => {
       catch: vi.fn(),
       on: vi.fn(),
     } as unknown as Bot;
-    const adapter = new GrammyTelegramAdapter("test-token", 7, bot);
+    const adapter = new GrammyTelegramAdapter("test-token", 7, "zh", bot);
 
     await adapter.sendTextMessage(42, "Select a thread:", null, [
       [{ text: "abcdef12 · Example", callbackData: "thread:abcdef12-full" }],
@@ -89,7 +110,7 @@ describe("GrammyTelegramAdapter", () => {
       catch: vi.fn(),
       on: vi.fn(),
     } as unknown as Bot;
-    const adapter = new GrammyTelegramAdapter("test-token", 7, bot);
+    const adapter = new GrammyTelegramAdapter("test-token", 7, "zh", bot);
 
     const ref = await adapter.sendRichMessage(42, "# Result\n\n- passed", "9", [
       [{ text: "Continue", callbackData: "thread:abc" }],

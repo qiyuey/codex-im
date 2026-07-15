@@ -23,7 +23,7 @@ Do not claim success unless local application and remote CI both succeed.
 
 ## 2. Prepare and reproduce CI locally
 
-1. Run `node skills/release/scripts/update-cachebuster.mjs .`. This replaces the manifest build
+1. Run `node .agents/skills/release/scripts/update-cachebuster.mjs .`. This replaces the manifest build
    suffix with `+codex.<UTC timestamp>` while preserving the base version. Do this before checks
    and commit so the locally installed version is also the committed, CI-tested version.
 2. Run the same verification contract as `.github/workflows/ci.yml`:

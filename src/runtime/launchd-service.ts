@@ -148,6 +148,7 @@ function waitForRunning(homeDirectory: string, previousPid: number | null): Laun
       state.pid !== previousPid &&
       runtime.running &&
       runtime.compatible &&
+      runtime.appServerConnected === true &&
       runtime.pid === state.pid
     ) {
       return state;

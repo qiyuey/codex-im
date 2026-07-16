@@ -32,4 +32,25 @@ describe("collectGatewayHealth", () => {
       rmSync(directory, { force: true, recursive: true });
     }
   });
+
+  it("is degraded when the daemon lost its app-server connection", () => {
+    const directory = mkdtempSync(join(tmpdir(), "gateway-health-disconnected-"));
+    const env = { CODEX_IM_DATA_DIR: directory };
+    const status = new RuntimeStatusWriter(
+      resolveRuntimeStatusPath(env),
+      Date.now,
+      process.pid,
+      () => false,
+    );
+    try {
+      status.start(60_000);
+      expect(collectGatewayHealth(env)).toMatchObject({
+        status: "degraded",
+        runtime: { running: true, appServerConnected: false },
+      });
+    } finally {
+      status.stop();
+      rmSync(directory, { force: true, recursive: true });
+    }
+  });
 });

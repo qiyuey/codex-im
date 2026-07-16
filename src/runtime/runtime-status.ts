@@ -14,6 +14,7 @@ export interface RuntimeStatusRecord {
   readonly protocolVersion: number;
   readonly startedAt: number;
   readonly heartbeatAt: number;
+  readonly appServerConnected: boolean | null;
   readonly stoppedAt?: number;
 }
 
@@ -25,6 +26,7 @@ export interface RuntimeHealth {
   readonly protocolVersion: number | null;
   readonly heartbeatAt: number | null;
   readonly heartbeatAgeMs: number | null;
+  readonly appServerConnected: boolean | null;
   readonly compatible: boolean;
 }
 
@@ -40,6 +42,7 @@ export class RuntimeStatusWriter {
     private readonly path = resolveRuntimeStatusPath(),
     private readonly now: () => number = Date.now,
     private readonly pid = process.pid,
+    private readonly appServerConnected: () => boolean | null = () => null,
   ) {
     this.startedAt = now();
   }
@@ -68,6 +71,7 @@ export class RuntimeStatusWriter {
       protocolVersion: GATEWAY_PROTOCOL_VERSION,
       startedAt: this.startedAt,
       heartbeatAt: timestamp,
+      appServerConnected: this.appServerConnected(),
       ...(state === "stopped" ? { stoppedAt: timestamp } : {}),
     };
     mkdirSync(dirname(this.path), { mode: 0o700, recursive: true });
@@ -100,6 +104,7 @@ export function readRuntimeHealth(
     protocolVersion: record.protocolVersion,
     heartbeatAt: record.heartbeatAt,
     heartbeatAgeMs,
+    appServerConnected: record.appServerConnected,
     compatible: record.protocolVersion === GATEWAY_PROTOCOL_VERSION,
   };
 }
@@ -114,11 +119,17 @@ function readRuntimeStatus(path: string): RuntimeStatusRecord | null {
       typeof value.runtimeVersion !== "string" ||
       typeof value.protocolVersion !== "number" ||
       typeof value.startedAt !== "number" ||
-      typeof value.heartbeatAt !== "number"
+      typeof value.heartbeatAt !== "number" ||
+      (value.appServerConnected !== undefined &&
+        value.appServerConnected !== null &&
+        typeof value.appServerConnected !== "boolean")
     ) {
       return null;
     }
-    return value as RuntimeStatusRecord;
+    return {
+      ...value,
+      appServerConnected: value.appServerConnected ?? null,
+    } as RuntimeStatusRecord;
   } catch {
     return null;
   }
@@ -142,6 +153,7 @@ function unknownHealth(): RuntimeHealth {
     protocolVersion: null,
     heartbeatAt: null,
     heartbeatAgeMs: null,
+    appServerConnected: null,
     compatible: false,
   };
 }

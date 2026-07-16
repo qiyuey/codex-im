@@ -92,7 +92,12 @@ export function createGatewayApplication(env: NodeJS.ProcessEnv = process.env): 
     dispatcher,
     notificationDispatcher,
     threadWatchMonitor,
-    runtimeStatus: new RuntimeStatusWriter(resolveRuntimeStatusPath(env)),
+    runtimeStatus: new RuntimeStatusWriter(
+      resolveRuntimeStatusPath(env),
+      Date.now,
+      process.pid,
+      () => appServer.isConnected(),
+    ),
     instanceLock: new SingleInstanceLock(resolveRuntimeLockPath(env)),
   });
 }

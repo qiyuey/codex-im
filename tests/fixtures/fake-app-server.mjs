@@ -75,6 +75,10 @@ lines.on("line", (line) => {
     process.stdout.write(
       `${JSON.stringify({ id: message.id, result: { cwd: "/workspace/example" } })}\n`,
     );
+  } else if (message.method === "test/exit") {
+    process.stdout.write(`${JSON.stringify({ id: message.id, result: {} })}\n`, () => {
+      process.exit(0);
+    });
   } else if (message.method === "turn/start") {
     if (message.params.sandboxPolicy?.type !== "dangerFullAccess") {
       throw new Error("turn/start must use dangerFullAccess");

@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppServerClient } from "../src/codex/app-server-client.js";
 
 const fakeServer = fileURLToPath(new URL("./fixtures/fake-app-server.mjs", import.meta.url));
@@ -33,6 +33,23 @@ describe("AppServerClient", () => {
     await client.connect();
 
     await expect(client.request("unknown", {})).rejects.toThrow("app-server error -32601");
+  });
+
+  it("reconnects on the next request after the app-server exits", async () => {
+    client = new AppServerClient({ command: process.execPath, args: [fakeServer] });
+    await client.connect();
+
+    await client.request("test/exit", {});
+    await vi.waitFor(() => expect(client?.isConnected()).toBe(false));
+
+    const [turn, snapshot] = await Promise.all([
+      client.readTurn("thread-1", "turn-1"),
+      client.readThreadSnapshot("thread-1"),
+    ]);
+
+    expect(client.isConnected()).toBe(true);
+    expect(turn.finalMessage).toBe("final answer");
+    expect(snapshot.latestTerminalTurnId).toBe("turn-1");
   });
 
   it("reads a watched-thread snapshot with a terminal baseline", async () => {

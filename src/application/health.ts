@@ -11,7 +11,10 @@ export function collectGatewayHealth(env: NodeJS.ProcessEnv = process.env) {
   try {
     const runtime = readRuntimeHealth(env);
     return {
-      status: runtime.running && runtime.compatible ? ("ok" as const) : ("degraded" as const),
+      status:
+        runtime.running && runtime.compatible && runtime.appServerConnected !== false
+          ? ("ok" as const)
+          : ("degraded" as const),
       inboundEnabled: new LocalKillSwitch(env).isInboundEnabled(),
       databasePath: resolveDatabasePath(env),
       plugin: {

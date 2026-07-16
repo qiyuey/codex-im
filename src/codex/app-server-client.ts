@@ -93,6 +93,7 @@ export class AppServerClient extends EventEmitter {
   private readonly pending = new Map<number, PendingRequest>();
   private process: ChildProcessWithoutNullStreams | null = null;
   private lines: Interface | null = null;
+  private connectPromise: Promise<InitializeResponse> | null = null;
   private nextId = 1;
   private readonly activeTurns = new Map<string, string>();
   private readonly threadSessions = new Map<string, ThreadResumeResponse>();
@@ -106,7 +107,30 @@ export class AppServerClient extends EventEmitter {
   }
 
   async connect(): Promise<InitializeResponse> {
-    if (this.process) throw new Error("App-server client is already connected");
+    if (this.isConnected()) throw new Error("App-server client is already connected");
+    return this.establishConnection();
+  }
+
+  isConnected(): boolean {
+    return Boolean(
+      this.process &&
+        this.process.exitCode === null &&
+        !this.process.stdin.destroyed &&
+        this.process.stdin.writable,
+    );
+  }
+
+  private async establishConnection(): Promise<InitializeResponse> {
+    if (this.connectPromise) return this.connectPromise;
+    this.connectPromise = this.spawnAndInitialize();
+    try {
+      return await this.connectPromise;
+    } finally {
+      this.connectPromise = null;
+    }
+  }
+
+  private async spawnAndInitialize(): Promise<InitializeResponse> {
     const child = spawn(this.command, [...this.args], { stdio: ["pipe", "pipe", "pipe"] });
     this.process = child;
     this.lines = createInterface({ input: child.stdout });
@@ -114,14 +138,16 @@ export class AppServerClient extends EventEmitter {
     child.stderr.on("data", () => {
       // Drain diagnostics without logging potentially sensitive app-server output.
     });
-    child.once("error", (error) => this.failAll(error));
+    child.once("error", (error) => this.handleDisconnect(child, error));
     child.once("exit", (code, signal) => {
-      this.failAll(new Error(`app-server exited (code=${String(code)}, signal=${String(signal)})`));
-      this.process = null;
+      this.handleDisconnect(
+        child,
+        new Error(`app-server exited (code=${String(code)}, signal=${String(signal)})`),
+      );
     });
 
     try {
-      const response = await this.request<InitializeResponse>("initialize", {
+      const response = await this.requestConnected<InitializeResponse>("initialize", {
         clientInfo: {
           name: "codex_im_gateway",
           title: "Codex IM",
@@ -305,7 +331,12 @@ export class AppServerClient extends EventEmitter {
     this.send({ id: requestId, error: { code: -32602, message } });
   }
 
-  request<TResult>(method: string, params: unknown): Promise<TResult> {
+  async request<TResult>(method: string, params: unknown): Promise<TResult> {
+    if (!this.isConnected()) await this.establishConnection();
+    return this.requestConnected<TResult>(method, params);
+  }
+
+  private requestConnected<TResult>(method: string, params: unknown): Promise<TResult> {
     const id = this.nextId++;
     return new Promise<TResult>((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -401,6 +432,16 @@ export class AppServerClient extends EventEmitter {
       pending.reject(error);
     }
     this.pending.clear();
+  }
+
+  private handleDisconnect(child: ChildProcessWithoutNullStreams, error: Error): void {
+    if (this.process !== child) return;
+    this.failAll(error);
+    this.process = null;
+    this.lines?.close();
+    this.lines = null;
+    this.threadSessions.clear();
+    this.activeTurns.clear();
   }
 }
 

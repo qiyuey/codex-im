@@ -38,6 +38,7 @@ server.registerTool(
         protocolVersion: z.number().nullable(),
         heartbeatAt: z.number().nullable(),
         heartbeatAgeMs: z.number().nullable(),
+        appServerConnected: z.boolean().nullable(),
         compatible: z.boolean(),
       }),
       notifications: z.object({

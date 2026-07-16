@@ -41,6 +41,25 @@ describe("runtime status", () => {
     });
   });
 
+  it("records whether the app-server child connection is available", () => {
+    const directory = temporaryDirectory();
+    const env = { CODEX_IM_DATA_DIR: directory };
+    let connected = true;
+    const writer = new RuntimeStatusWriter(
+      resolveRuntimeStatusPath(env),
+      Date.now,
+      process.pid,
+      () => connected,
+    );
+
+    writer.start(60_000);
+    expect(readRuntimeHealth(env).appServerConnected).toBe(true);
+
+    connected = false;
+    writer.stop();
+    expect(readRuntimeHealth(env).appServerConnected).toBe(false);
+  });
+
   it("treats malformed status as unknown", () => {
     const directory = temporaryDirectory();
     const env = { CODEX_IM_DATA_DIR: directory };

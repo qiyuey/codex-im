@@ -90,7 +90,9 @@ action. It does not stop outbound completion delivery. Use `SIGINT` or `SIGTERM`
 to stop the entire foreground daemon gracefully.
 
 `health` always prints structured state. It returns `status: "ok"` only when a fresh heartbeat
-belongs to a live, protocol-compatible daemon; otherwise it returns `status: "degraded"`. `doctor`
+belongs to a live, protocol-compatible daemon whose Codex app-server child is connected; otherwise
+it returns `status: "degraded"`. The client reconnects that child on the next Codex request after an
+unexpected exit. `doctor`
 prints the same evidence and exits non-zero when degraded, making it suitable for service checks.
 
 ## Queue recovery

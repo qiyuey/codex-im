@@ -15,6 +15,7 @@ export function telegramCommands(language: GatewayLanguage) {
     { command: "current", description: translate(language, "commandCurrent") },
     { command: "new", description: translate(language, "commandNew") },
     { command: "mute", description: translate(language, "commandMute") },
+    { command: "unmute", description: translate(language, "commandUnmute") },
     { command: "detach", description: translate(language, "commandDetach") },
     { command: "stop", description: translate(language, "commandStop") },
   ] as const;
@@ -119,8 +120,8 @@ export class GrammyTelegramAdapter implements TelegramApi {
     await this.bot.start({ allowed_updates: ["message", "callback_query"] });
   }
 
-  stop(): void {
-    this.bot.stop();
+  async stop(): Promise<void> {
+    await this.bot.stop();
   }
 
   async sendTextMessage(

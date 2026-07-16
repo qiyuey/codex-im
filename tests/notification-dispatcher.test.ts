@@ -47,17 +47,45 @@ describe("NotificationDispatcher", () => {
       1_000,
     );
     const sender = { sendNotification: vi.fn(async () => ({ messageId: "message-bound" })) };
-    const recordBinding = vi.fn();
-    const dispatcher = new NotificationDispatcher(store, sender, async () => true, recordBinding);
+    const coordinator = {
+      findDeliveredMessageId: vi.fn(() => null),
+      recordDelivered: vi.fn(),
+    };
+    const dispatcher = new NotificationDispatcher(store, sender, async () => true, coordinator);
 
     await dispatcher.runOnce(1_100);
 
-    expect(recordBinding).toHaveBeenCalledWith(
+    expect(coordinator.recordDelivered).toHaveBeenCalledWith(
       expect.objectContaining({
         source: { kind: "bound_task", codexThreadId: "thread-1", codexTurnId: "turn-1" },
       }),
       "message-bound",
     );
+  });
+
+  it("reuses an existing bound-task delivery without sending a duplicate", async () => {
+    store.enqueue(
+      {
+        idempotencyKey: "bound:thread-1:turn-1",
+        channel: "telegram",
+        cwd: "/workspace/example",
+        title: "Bound result",
+        message: "Done.",
+        source: { kind: "bound_task", codexThreadId: "thread-1", codexTurnId: "turn-1" },
+      },
+      1_000,
+    );
+    const sender = { sendNotification: vi.fn() };
+    const coordinator = {
+      findDeliveredMessageId: vi.fn(() => "existing-message"),
+      recordDelivered: vi.fn(),
+    };
+    const dispatcher = new NotificationDispatcher(store, sender, async () => true, coordinator);
+
+    await dispatcher.runOnce(1_100);
+
+    expect(sender.sendNotification).not.toHaveBeenCalled();
+    expect(store.list("delivered")[0]?.platformMessageId).toBe("existing-message");
   });
 });
 

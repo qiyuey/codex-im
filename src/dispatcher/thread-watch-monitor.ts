@@ -66,12 +66,32 @@ export class ThreadWatchMonitor {
         snapshot.blockedGoal &&
         snapshot.blockedGoal.updatedAt !== current.lastDeliveredGoalUpdatedAt
       ) {
+        const terminal = snapshot.latestTerminalTurn;
+        if (
+          this.state.isThreadMuted(current, snapshot.threadId) ||
+          (terminal &&
+            this.state.getTerminalDeliveryMessageId(current, terminal.threadId, terminal.turnId))
+        ) {
+          this.state.acknowledgeWatchedState(current, snapshot.threadId, {
+            turnId: terminal?.turnId ?? null,
+            blockedGoalUpdatedAt: snapshot.blockedGoal.updatedAt,
+          });
+          return;
+        }
         await this.sendBlocked(current, snapshot);
         return;
       }
 
       const turn = snapshot.latestTerminalTurn;
       if (!turn || turn.turnId === current.lastDeliveredTurnId) {
+        return;
+      }
+
+      if (
+        this.state.isThreadMuted(current, turn.threadId) ||
+        this.state.getTerminalDeliveryMessageId(current, turn.threadId, turn.turnId)
+      ) {
+        this.state.acknowledgeWatchedState(current, turn.threadId, { turnId: turn.turnId });
         return;
       }
 
@@ -100,12 +120,13 @@ export class ThreadWatchMonitor {
       watch.topicId,
       taskActionKeyboard(turn.threadId, this.language),
     );
-    this.state.bindMessage(
-      watch.channel,
-      watch.chatId,
-      message.messageId,
+    this.state.recordTerminalDelivery(
+      watch,
       turn.threadId,
       turn.turnId,
+      "watch",
+      null,
+      message.messageId,
     );
     this.state.acknowledgeWatchedState(watch, turn.threadId, { turnId: turn.turnId });
   }
@@ -122,13 +143,25 @@ export class ThreadWatchMonitor {
       watch.topicId,
       taskActionKeyboard(snapshot.threadId, this.language),
     );
-    this.state.bindMessage(
-      watch.channel,
-      watch.chatId,
-      message.messageId,
-      snapshot.threadId,
-      snapshot.latestTurn?.turnId ?? `goal:${blocked.updatedAt}`,
-    );
+    const terminal = snapshot.latestTerminalTurn;
+    if (terminal) {
+      this.state.recordTerminalDelivery(
+        watch,
+        terminal.threadId,
+        terminal.turnId,
+        "watch",
+        `goal:${blocked.updatedAt}`,
+        message.messageId,
+      );
+    } else {
+      this.state.bindMessage(
+        watch.channel,
+        watch.chatId,
+        message.messageId,
+        snapshot.threadId,
+        snapshot.latestTurn?.turnId ?? `goal:${blocked.updatedAt}`,
+      );
+    }
     this.state.acknowledgeWatchedState(watch, snapshot.threadId, {
       turnId: snapshot.latestTerminalTurn?.turnId ?? null,
       blockedGoalUpdatedAt: blocked.updatedAt,

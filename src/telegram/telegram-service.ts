@@ -218,12 +218,14 @@ export class TelegramService {
   }
 
   private async handleMuteCallback(query: TelegramCallbackQuery, threadId: string): Promise<void> {
-    const watch = this.state.getThreadWatch("telegram", String(query.chatId), query.topicId);
-    if (!watch || watch.codexThreadId !== threadId) {
-      await this.api.answerCallbackQuery(query.queryId, this.text("taskNotWatched"));
+    if (!threadId) {
+      await this.api.answerCallbackQuery(query.queryId, this.text("taskUnavailable"));
       return;
     }
-    this.state.clearThreadWatch("telegram", String(query.chatId), query.topicId);
+    this.state.muteThread(
+      { channel: "telegram", chatId: String(query.chatId), topicId: query.topicId },
+      threadId,
+    );
     await this.api.answerCallbackQuery(query.queryId, this.text("mutedKeepCurrent"));
     await this.api
       .editMessageKeyboard(
@@ -567,14 +569,17 @@ export class TelegramService {
         String(message.chatId),
         message.topicId,
       );
-      const watch = this.state.getThreadWatch("telegram", String(message.chatId), message.topicId);
       await this.api.sendTextMessage(
         message.chatId,
         active
           ? this.text("currentThread", {
               thread: active,
-              watchState:
-                watch?.codexThreadId === active ? this.text("watching") : this.text("muted"),
+              watchState: this.state.isThreadMuted(
+                { channel: "telegram", chatId: String(message.chatId), topicId: message.topicId },
+                active,
+              )
+                ? this.text("muted")
+                : this.text("watching"),
             })
           : this.text("noThreadSelected"),
         message.topicId,
@@ -591,14 +596,39 @@ export class TelegramService {
       return;
     }
     if (command === "mute") {
-      const muted = this.state.clearThreadWatch(
+      const active = this.state.getActiveThread(
         "telegram",
         String(message.chatId),
         message.topicId,
       );
+      if (active) {
+        this.state.muteThread(
+          { channel: "telegram", chatId: String(message.chatId), topicId: message.topicId },
+          active,
+        );
+      }
       await this.api.sendTextMessage(
         message.chatId,
-        muted ? this.text("notificationsMuted") : this.text("noWatchedThread"),
+        active ? this.text("notificationsMuted") : this.text("noThreadSelected"),
+        message.topicId,
+      );
+      return;
+    }
+    if (command === "unmute") {
+      const active = this.state.getActiveThread(
+        "telegram",
+        String(message.chatId),
+        message.topicId,
+      );
+      if (active) {
+        this.state.unmuteThread(
+          { channel: "telegram", chatId: String(message.chatId), topicId: message.topicId },
+          active,
+        );
+      }
+      await this.api.sendTextMessage(
+        message.chatId,
+        active ? this.text("notificationsUnmuted") : this.text("noThreadSelected"),
         message.topicId,
       );
       return;
@@ -754,14 +784,19 @@ export class TelegramService {
           turnId: result.turnId,
         },
       );
-      this.state.bindMessage(
-        "telegram",
-        String(placeholder.chatId),
-        placeholder.messageId,
+      await editor.finish(result);
+      this.state.recordTerminalDelivery(
+        {
+          channel: "telegram",
+          chatId: String(placeholder.chatId),
+          topicId: placeholder.topicId,
+        },
         threadId,
         result.turnId,
+        "telegram_turn",
+        null,
+        placeholder.messageId,
       );
-      await editor.finish(result);
       try {
         const snapshot = await this.appServer.readThreadSnapshot(threadId);
         if (snapshot.blockedGoal) {

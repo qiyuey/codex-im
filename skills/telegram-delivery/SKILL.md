@@ -6,6 +6,10 @@ description: Deliver one completed Codex task result to Telegram. Use only when 
 # Telegram Delivery
 
 Use the bundled `telegram_deliver` MCP tool as the final action of an explicitly opted-in task.
+Ordinary top-level turns already receive an automatic completion card; use this workflow only when
+the user or schedule explicitly wants a custom self-contained notification. When trusted metadata
+binds both paths to the same turn, the gateway sends the explicit result and suppresses the
+automatic duplicate.
 
 1. Finish the requested work and its required verification before preparing the notification.
 2. Compose a concise, self-contained result:
@@ -21,7 +25,7 @@ Use the bundled `telegram_deliver` MCP tool as the final action of an explicitly
    successful enqueue response.
 5. After the tool returns, give the same outcome in the normal Codex final response and state
    whether Telegram delivery was queued. A queued response is success; network delivery is handled
-asynchronously by the gateway daemon.
+   asynchronously by the gateway daemon.
 
 The MCP host may attach trusted Codex request metadata outside the model-visible
 tool arguments. When its thread and session identifiers agree, the gateway binds

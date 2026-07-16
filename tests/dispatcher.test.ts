@@ -84,6 +84,45 @@ describe("Dispatcher", () => {
     expect(events.counts().deadLetter).toBe(1);
     expect(sender.sendCompletion).not.toHaveBeenCalled();
   });
+
+  it("acknowledges a turn already delivered by another producer without sending twice", async () => {
+    enqueue();
+    state.recordTerminalDelivery(
+      { channel: "telegram", chatId: "42" },
+      "thread-1",
+      "turn-1",
+      "watch",
+      null,
+      "existing-message",
+    );
+    const reader = { readTurn: vi.fn() };
+    const sender = { sendCompletion: vi.fn() };
+    const dispatcher = new Dispatcher(events, state, reader, sender, {
+      channel: "telegram",
+      chatId: "42",
+    });
+
+    await dispatcher.runOnce(1_100);
+
+    expect(events.counts().delivered).toBe(1);
+    expect(reader.readTurn).not.toHaveBeenCalled();
+    expect(sender.sendCompletion).not.toHaveBeenCalled();
+  });
+
+  it("acknowledges a muted thread without sending", async () => {
+    enqueue();
+    state.muteThread({ channel: "telegram", chatId: "42" }, "thread-1");
+    const sender = { sendCompletion: vi.fn() };
+    const dispatcher = new Dispatcher(events, state, { readTurn: vi.fn() }, sender, {
+      channel: "telegram",
+      chatId: "42",
+    });
+
+    await dispatcher.runOnce(1_100);
+
+    expect(events.counts().delivered).toBe(1);
+    expect(sender.sendCompletion).not.toHaveBeenCalled();
+  });
 });
 
 function enqueue() {

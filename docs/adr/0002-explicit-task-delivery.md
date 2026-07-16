@@ -1,6 +1,6 @@
 # ADR 0002: Use Skill plus MCP for explicit task-result delivery
 
-- Status: accepted
+- Status: superseded in part by ADR 0005
 - Date: 2026-07-15
 
 ## Context

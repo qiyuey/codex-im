@@ -153,4 +153,35 @@ export const migrations: readonly Migration[] = [
       END;
     `,
   },
+  {
+    version: 5,
+    name: "terminal_delivery_identity_and_thread_mutes",
+    sql: `
+      CREATE TABLE terminal_deliveries (
+        channel TEXT NOT NULL,
+        chat_id TEXT NOT NULL,
+        topic_id TEXT NOT NULL DEFAULT '',
+        codex_thread_id TEXT NOT NULL,
+        codex_turn_id TEXT NOT NULL,
+        source_kind TEXT NOT NULL
+          CHECK (
+            source_kind IN ('completion_event', 'explicit_notification', 'telegram_turn', 'watch')
+          ),
+        source_id TEXT,
+        message_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (channel, chat_id, topic_id, codex_thread_id, codex_turn_id)
+      ) STRICT;
+
+      CREATE TABLE muted_threads (
+        channel TEXT NOT NULL,
+        chat_id TEXT NOT NULL,
+        topic_id TEXT NOT NULL DEFAULT '',
+        codex_thread_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (channel, chat_id, topic_id, codex_thread_id)
+      ) STRICT;
+    `,
+  },
 ] as const;

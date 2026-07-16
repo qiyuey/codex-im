@@ -1,6 +1,6 @@
 # Codex IM Gateway
 
-> Get selected Codex results in Telegram and continue the same task from your phone.
+> Get every Codex result in Telegram and explicitly switch which task your phone controls.
 
 [简体中文](README.zh-CN.md) | English
 
@@ -19,13 +19,13 @@ Feishu, and generic webhooks are planned but not implemented.
 
 ## What you can do
 
-- Send the final result of an explicitly selected Codex or Scheduled task to Telegram.
+- Send every allowed top-level Codex or Scheduled task result to Telegram.
 - Browse allowed Codex projects and tasks with `/threads`.
 - Continue the selected task by sending a normal Telegram message.
 - Reply to a result card and always return to the task that produced it.
 - Answer non-secret multiple-choice or free-form Codex questions from Telegram.
-- Watch a Desktop task and receive one notification when it finishes, fails, is
-  interrupted with a useful result, or becomes blocked.
+- Receive one deduplicated notification when a Desktop task finishes or fails,
+  plus blocked-state notifications for the selected task.
 
 The gateway does not stream Desktop reasoning, commands, tool calls, or partial
 output. Telegram-originated turns update one placeholder message while running.
@@ -115,18 +115,18 @@ project and task, and send a short message. The reply should continue that task.
 
 ## Everyday use
 
-### Send a task result to Telegram
+### Receive task results in Telegram
 
-Delivery is opt-in. Ask Codex to use `$telegram-delivery` as the final step:
+Top-level Codex turns are delivered automatically. Use `$telegram-delivery`
+only when a workflow needs a custom explicit result message:
 
 ```text
 Run the test suite, summarize any failures, and use $telegram-delivery as the
 final step to send me the result on Telegram.
 ```
 
-The same instruction can be added to a Scheduled task prompt. Tasks that do not
-request Telegram delivery are not sent automatically unless you watch their
-thread from Telegram.
+When Codex supplies trusted thread and turn identity, the custom message and the
+automatic completion card share one delivery identity and are not sent twice.
 
 ### Continue a task from Telegram
 
@@ -138,9 +138,11 @@ read, the gateway does not infer projects from task directories; tasks remain av
 
 - a normal message continues the active task;
 - replying to a result or question card continues the task bound to that card;
-- selecting another task moves the active watch to it;
-- `/mute` stops completion notifications without changing the active task;
-- `/detach` clears both the active task and its watch.
+- selecting another task changes only where new plain messages are routed;
+- completions from other tasks continue to arrive with **Switch to this task**;
+- `/mute` stops automatic completion notifications for the active task;
+- `/unmute` restores them;
+- `/detach` clears only the active task selection.
 
 Reply routing is durable: a reply never silently falls back to an unrelated
 active task. A notification without trusted Codex task metadata is clearly shown
@@ -155,7 +157,8 @@ as an independent notification and offers a task picker instead.
 | `/current` | Show the active task |
 | `/new` | Create a task in the first allowed workspace |
 | `/mute` | Stop completion notifications for the active task |
-| `/detach` | Clear the active task and watch |
+| `/unmute` | Restore completion notifications for the active task |
+| `/detach` | Clear the active task selection |
 | `/stop` | Interrupt the active turn and cancel queued follow-ups |
 
 The daemon adds these commands to the Telegram bot menu at startup.
@@ -207,8 +210,9 @@ For backup, token rotation, queue recovery, and removal instructions, see
 
 **Does it send every Codex task to Telegram?**
 
-No. A task must explicitly request `$telegram-delivery`, or you must select and
-watch that task from Telegram.
+Yes, every top-level turn whose workspace is allowed is captured automatically.
+Subagent completions are not sent as separate cards. Per-task `/mute` preferences
+and the workspace allowlist still apply.
 
 **Can I answer Codex questions from Telegram?**
 
@@ -225,7 +229,7 @@ rejected.
 **Does uninstalling the gateway delete Codex tasks?**
 
 No. Codex remains the source of truth. The gateway stores only its queue,
-delivery, watch, and message-binding state.
+delivery, mute, selected-task monitor, and message-binding state.
 
 **Why did I receive an “independent notification”?**
 

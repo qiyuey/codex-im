@@ -13,7 +13,7 @@ beforeEach(() => {
 afterEach(() => database.close());
 
 describe("GatewayStateStore", () => {
-  it("persists delivery, reply binding, and active context atomically", () => {
+  it("persists delivery and reply binding without changing active routing", () => {
     const event = new CompletionEventStore(database).enqueue({
       idempotencyKey: "thread:turn",
       codexThreadId: "thread",
@@ -35,7 +35,10 @@ describe("GatewayStateStore", () => {
       codexThreadId: "thread",
       codexTurnId: "turn",
     });
-    expect(state.getActiveThread("telegram", "42")).toBe("thread");
+    expect(state.getActiveThread("telegram", "42")).toBeNull();
+    expect(
+      state.getTerminalDeliveryMessageId({ channel: "telegram", chatId: "42" }, "thread", "turn"),
+    ).toBe("100");
   });
 
   it("normalizes null topic identifiers and detaches context", () => {
@@ -71,5 +74,29 @@ describe("GatewayStateStore", () => {
       lastDeliveredTurnId: "turn-3",
       lastDeliveredGoalUpdatedAt: 10,
     });
+  });
+
+  it("deduplicates terminal deliveries across producers and stores thread mutes separately", () => {
+    const target = { channel: "telegram", chatId: "42" };
+
+    expect(
+      state.recordTerminalDelivery(target, "thread-1", "turn-1", "watch", null, "message-1"),
+    ).toBe(true);
+    expect(
+      state.recordTerminalDelivery(
+        target,
+        "thread-1",
+        "turn-1",
+        "explicit_notification",
+        "notification-1",
+        "message-2",
+      ),
+    ).toBe(false);
+    expect(state.getTerminalDeliveryMessageId(target, "thread-1", "turn-1")).toBe("message-1");
+
+    state.muteThread(target, "thread-1");
+    expect(state.isThreadMuted(target, "thread-1")).toBe(true);
+    expect(state.unmuteThread(target, "thread-1")).toBe(true);
+    expect(state.isThreadMuted(target, "thread-1")).toBe(false);
   });
 });

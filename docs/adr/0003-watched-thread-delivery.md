@@ -1,6 +1,6 @@
 # ADR 0003: Watch one selected thread per Telegram context
 
-- Status: accepted
+- Status: superseded in part by ADR 0005
 - Date: 2026-07-15
 
 ## Context

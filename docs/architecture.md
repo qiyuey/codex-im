@@ -24,11 +24,12 @@ never inferred from cwd, title, recency, or the active-thread pointer.
 
 ### Codex plugin package
 
-The repository is the plugin root. The plugin bundles two Codex-facing
+The repository is the plugin root. The plugin bundles three Codex-facing
 surfaces while keeping the long-running gateway daemon independent:
 
 ```text
 Codex plugin
+├── Stop hook ───────> durable top-level turn event
 ├── Skills ──────────> explicit workflow and safe operating instructions
 └── MCP server ──────> health, inspection, durable explicit enqueue
                               |
@@ -63,18 +64,29 @@ headings, lists, tables, links, quotes, and code. Control prompts, command
 feedback, and errors use unparsed plain text. Normal business paths do not use
 Telegram HTML or MarkdownV2.
 
-This boundary is intentionally explicit. A lifecycle hook is not used to infer
-delivery intent, so ordinary Desktop turns and Scheduled turns remain silent
-unless the user separately watches their thread from Telegram.
-When a scheduler provides a stable run identifier, the caller can supply it as
-a dedupe key; otherwise the MCP server assigns a unique enqueue identifier.
+Explicit notifications complement automatic completion cards. When a bound
+explicit notification represents the same thread and turn, it is delivered
+first and the automatic completion event is acknowledged without a duplicate.
+Notification-only messages remain independent. When a scheduler provides a
+stable run identifier, the caller can supply it as a dedupe key; otherwise the
+MCP server assigns a unique enqueue identifier.
+
+### Global completion producer
+
+The plugin `Stop` hook captures every top-level Codex turn into the local SQLite
+inbox. It validates only stable lifecycle fields, writes no transcript content,
+does not access the network, and never fails the Codex turn. Transcriptless
+internal sessions are ignored because they are not user-visible Codex tasks. The
+daemon later resumes the persisted task, reads the exact turn through app-server,
+and performs authorization and delivery. `SubagentStop` is intentionally not
+registered.
 
 ### Event store
 
-SQLite stores explicit outbound notifications, legacy completion events,
-delivery attempts, message bindings, active context, one watched thread per
-chat/topic, and user-facing thread metadata. Codex retains ownership of thread
-content.
+SQLite stores completion events, explicit outbound notifications, delivery
+attempts, a unified terminal-delivery ledger, message bindings, active context,
+per-thread mute preferences, one selected-thread monitor per chat/topic, and
+user-facing thread metadata. Codex retains ownership of thread content.
 
 The implementation uses Node 26's built-in synchronous SQLite API. Migrations
 run atomically, foreign keys and defensive mode are enabled, and WAL mode allows
@@ -108,7 +120,9 @@ The watched-thread monitor polls only persisted watches through `thread/read`
 and `thread/goal/get`, with a five-second minimum interval. Selection records the
 latest terminal turn and blocked-goal revision as a baseline, so historical
 results are not replayed. A new completed, failed, non-empty interrupted, or
-goal-blocked state is delivered once and bound back to its thread. Empty
+goal-blocked state is delivered once and bound back to its thread. It shares the
+terminal-delivery identity with the global hook, explicit bound notifications,
+and Telegram-originated streamed turns, so only the first producer sends. Empty
 interruptions are neither delivered nor acknowledged, allowing a resumed turn
 with the same ID to deliver its eventual result. Workspace authorization is
 rechecked before each delivery.
@@ -149,6 +163,10 @@ New persistent cards use a dedicated `switch:` callback prefix. The handler also
 checks durable message bindings for legacy `thread:` cards so already-delivered
 messages receive the same preserve-in-place behavior. Only unbound `thread:`
 callbacks from temporary pickers may replace their source message.
+
+Receiving or replying to a result card does not change the active-thread
+pointer. Only an explicit switch/select action changes where a new plain
+Telegram message is routed.
 
 ### Local kill switch
 
@@ -191,6 +209,7 @@ Authorization of a user does not imply permission to widen the Codex sandbox.
 - Adapter shutdown stops accepting new inbound work before Codex connections are
   terminated.
 - Duplicate explicit notification dedupe keys reuse the existing queue record.
+- Duplicate terminal observations reuse the channel/thread/turn delivery record.
 
 ## Decision records
 
@@ -199,6 +218,7 @@ Implemented decisions:
 1. plugin packaging and process separation;
 2. explicit Skill plus MCP task-result delivery.
 3. single watched-thread terminal delivery per Telegram chat/topic.
+4. global top-level completion delivery decoupled from active routing.
 
 Future ADR candidates include app-server lifecycle, SQLite migration strategy,
 thread concurrency, adapter API stability, and artifact containment.

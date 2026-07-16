@@ -13,17 +13,17 @@ type BoundOutboundNotification = OutboundNotification & {
   };
 };
 
-export type NotificationBindingRecorder = (
-  notification: BoundOutboundNotification,
-  messageId: string,
-) => void;
+export interface BoundNotificationCoordinator {
+  findDeliveredMessageId(notification: BoundOutboundNotification): string | null;
+  recordDelivered(notification: BoundOutboundNotification, messageId: string): void;
+}
 
 export class NotificationDispatcher {
   constructor(
     private readonly notifications: OutboundNotificationStore,
     private readonly sender: NotificationSender,
     private readonly workspaceAllowed: (cwd: string) => Promise<boolean> = async () => true,
-    private readonly recordBinding?: NotificationBindingRecorder,
+    private readonly boundCoordinator?: BoundNotificationCoordinator,
   ) {}
 
   async runOnce(now = Date.now()): Promise<boolean> {
@@ -40,10 +40,28 @@ export class NotificationDispatcher {
         );
         return true;
       }
+      if (notification.source.kind === "bound_task") {
+        if (!this.boundCoordinator) {
+          throw new Error("bound notification coordinator is unavailable");
+        }
+        const deliveredMessageId = this.boundCoordinator.findDeliveredMessageId(
+          notification as BoundOutboundNotification,
+        );
+        if (deliveredMessageId) {
+          this.notifications.markDelivered(
+            notification.id,
+            notification.leaseToken,
+            deliveredMessageId,
+          );
+          return true;
+        }
+      }
       const sent = await this.sender.sendNotification(notification);
       if (notification.source.kind === "bound_task") {
-        if (!this.recordBinding) throw new Error("bound notification recorder is unavailable");
-        this.recordBinding(notification as BoundOutboundNotification, sent.messageId);
+        this.boundCoordinator?.recordDelivered(
+          notification as BoundOutboundNotification,
+          sent.messageId,
+        );
       }
       this.notifications.markDelivered(notification.id, notification.leaseToken, sent.messageId);
     } catch (error) {

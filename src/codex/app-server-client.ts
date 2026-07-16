@@ -138,6 +138,7 @@ export class AppServerClient extends EventEmitter {
   }
 
   async readTurn(threadId: string, turnId: string): Promise<CanonicalTurnResult> {
+    await this.resumeThread(threadId);
     const params: ThreadReadParams = { threadId, includeTurns: true };
     const response = await this.request<ThreadReadResponse>("thread/read", params);
     const turn = response.thread.turns.find((candidate) => candidate.id === turnId);
@@ -160,6 +161,7 @@ export class AppServerClient extends EventEmitter {
   }
 
   async readThreadSnapshot(threadId: string): Promise<WatchedThreadSnapshot> {
+    await this.resumeThread(threadId);
     const threadParams: ThreadReadParams = { threadId, includeTurns: true };
     const goalParams: ThreadGoalGetParams = { threadId };
     const [threadResponse, goalResponse] = await Promise.all([

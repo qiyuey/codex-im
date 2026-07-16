@@ -51,14 +51,23 @@ async function main(): Promise<void> {
     notifications,
     new TelegramNotificationSender(telegram, config.telegramAllowedChatId, config.language),
     (cwd) => isWorkspaceAllowed(cwd, config.allowedWorkspaces),
-    (notification, messageId) => {
-      state.bindMessage(
-        "telegram",
-        String(config.telegramAllowedChatId),
-        messageId,
-        notification.source.codexThreadId,
-        notification.source.codexTurnId,
-      );
+    {
+      findDeliveredMessageId: (notification) =>
+        state.getTerminalDeliveryMessageId(
+          { channel: "telegram", chatId: String(config.telegramAllowedChatId) },
+          notification.source.codexThreadId,
+          notification.source.codexTurnId,
+        ),
+      recordDelivered: (notification, messageId) => {
+        state.recordTerminalDelivery(
+          { channel: "telegram", chatId: String(config.telegramAllowedChatId) },
+          notification.source.codexThreadId,
+          notification.source.codexTurnId,
+          "explicit_notification",
+          notification.id,
+          messageId,
+        );
+      },
     },
   );
   const threadWatchMonitor = new ThreadWatchMonitor(
@@ -73,6 +82,7 @@ async function main(): Promise<void> {
   let dispatching = false;
   let dispatchPromise: Promise<void> | null = null;
   let stopping = false;
+  let stopPromise: Promise<void> | null = null;
   await appServer.connect();
   await threadWatchMonitor.initializeExistingSelections();
   await telegram.configureCommandMenu(config.telegramAllowedChatId);
@@ -90,20 +100,23 @@ async function main(): Promise<void> {
       });
   }, config.dispatchIntervalMs);
 
-  const stop = () => {
-    if (stopping) return;
+  const stop = (): Promise<void> => {
+    if (stopPromise) return stopPromise;
     stopping = true;
     clearInterval(interval);
-    telegram.stop();
+    stopPromise = telegram.stop().catch(() => {
+      process.stderr.write(`${JSON.stringify({ level: "warn", event: "telegram_stop_failed" })}\n`);
+    });
+    return stopPromise;
   };
-  process.once("SIGINT", stop);
-  process.once("SIGTERM", stop);
+  process.once("SIGINT", () => void stop());
+  process.once("SIGTERM", () => void stop());
 
   process.stdout.write(`${JSON.stringify({ level: "info", event: "gateway_started" })}\n`);
   try {
     await telegram.start();
   } finally {
-    stop();
+    await stop();
     await dispatchPromise;
     await service.drain();
     await appServer.close();
@@ -118,8 +131,8 @@ async function drainDispatchers(
   threadWatchMonitor: ThreadWatchMonitor,
 ): Promise<void> {
   for (let processed = 0; processed < 20; processed += 1) {
-    const completionProcessed = await dispatcher.runOnce();
     const notificationProcessed = await notificationDispatcher.runOnce();
+    const completionProcessed = await dispatcher.runOnce();
     if (!completionProcessed && !notificationProcessed) break;
   }
   await threadWatchMonitor.runOnce();

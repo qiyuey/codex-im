@@ -25,19 +25,21 @@ applies to Telegram command descriptions, buttons, task cards, pickers, input
 requests, and gateway status/error messages after the daemon restarts. Codex
 answers and caller-provided notification titles/messages are not translated.
 
-Telegram delivery is explicit. A task prompt must invoke `$telegram-delivery`
-and require it as the final workflow step. The task workspace must be within
-`CODEX_IM_GATEWAY_ALLOWED_WORKSPACES`; otherwise the daemon moves the notification
-to dead letter without sending it. Ordinary tasks and Scheduled tasks do not
-produce notifications automatically unless their thread is selected and watched
-from Telegram.
+Every top-level Codex turn is captured automatically by the plugin `Stop` hook.
+The task workspace must be within `CODEX_IM_GATEWAY_ALLOWED_WORKSPACES`;
+otherwise the daemon moves its completion event to dead letter without sending
+it. Use `$telegram-delivery` only when a workflow needs a custom explicit result
+message; a bound explicit result is deduplicated against the automatic card for
+the same turn.
 
-Selecting a thread with `/threads`, `/use`, or `/new` also watches it. The daemon
-checks the watched thread about every five seconds and sends only new terminal
-states. `/mute` removes the watch while keeping the selected thread; selecting a
-thread again re-enables it. `/detach` clears both selection and watch.
+Selecting a thread with `/threads`, `/use`, or `/new` changes where new Telegram
+messages are routed. It does not limit notifications from other tasks. The
+daemon also checks the selected thread about every five seconds as a fallback
+and for blocked-goal state; the unified delivery ledger prevents duplicate
+cards. `/mute` suppresses automatic completion notifications for the current
+task, `/unmute` restores them, and `/detach` only clears the active selection.
 
-Bound completion messages show **切换到此任务** / **停止通知** actions. These
+Bound completion messages show **切换到此任务** / **停止此任务通知** actions. These
 actions preserve the result text; stopping notifications updates only the
 buttons. Explicit
 `$telegram-delivery` messages automatically bind to the originating task when

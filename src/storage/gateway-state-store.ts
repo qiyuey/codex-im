@@ -17,6 +17,12 @@ export interface DeliveryTarget {
   readonly topicId?: string | null;
 }
 
+export type TerminalDeliverySource =
+  | "completion_event"
+  | "explicit_notification"
+  | "telegram_turn"
+  | "watch";
+
 export interface ThreadWatchRecord {
   readonly channel: string;
   readonly chatId: string;
@@ -106,17 +112,104 @@ export class GatewayStateStore {
           now,
           now,
         );
-      this.bindMessage(
-        target.channel,
-        target.chatId,
+      if (
+        this.insertTerminalDelivery(
+          target,
+          binding.threadId,
+          binding.turnId,
+          "completion_event",
+          completionEventId,
+          messageId,
+          now,
+        )
+      ) {
+        this.bindMessage(
+          target.channel,
+          target.chatId,
+          messageId,
+          binding.threadId,
+          binding.turnId,
+          binding.scheduleKey ?? null,
+          now,
+        );
+      }
+    });
+  }
+
+  getTerminalDeliveryMessageId(
+    target: DeliveryTarget,
+    threadId: string,
+    turnId: string,
+  ): string | null {
+    const row = this.database.connection
+      .prepare(`
+        SELECT message_id FROM terminal_deliveries
+        WHERE channel = ? AND chat_id = ? AND topic_id = ?
+          AND codex_thread_id = ? AND codex_turn_id = ?
+      `)
+      .get(target.channel, target.chatId, normalizeTopic(target.topicId), threadId, turnId) as
+      | { message_id: string }
+      | undefined;
+    return row?.message_id ?? null;
+  }
+
+  recordTerminalDelivery(
+    target: DeliveryTarget,
+    threadId: string,
+    turnId: string,
+    sourceKind: TerminalDeliverySource,
+    sourceId: string | null,
+    messageId: string,
+    now = Date.now(),
+  ): boolean {
+    return this.database.transaction(() => {
+      const inserted = this.insertTerminalDelivery(
+        target,
+        threadId,
+        turnId,
+        sourceKind,
+        sourceId,
         messageId,
-        binding.threadId,
-        binding.turnId,
-        binding.scheduleKey ?? null,
         now,
       );
-      this.setActiveThread(target.channel, target.chatId, target.topicId, binding.threadId, now);
+      if (inserted) {
+        this.bindMessage(target.channel, target.chatId, messageId, threadId, turnId, null, now);
+      }
+      return inserted;
     });
+  }
+
+  isThreadMuted(target: DeliveryTarget, threadId: string): boolean {
+    return (
+      this.database.connection
+        .prepare(`
+          SELECT 1 FROM muted_threads
+          WHERE channel = ? AND chat_id = ? AND topic_id = ? AND codex_thread_id = ?
+        `)
+        .get(target.channel, target.chatId, normalizeTopic(target.topicId), threadId) !== undefined
+    );
+  }
+
+  muteThread(target: DeliveryTarget, threadId: string, now = Date.now()): void {
+    this.database.connection
+      .prepare(`
+        INSERT INTO muted_threads (
+          channel, chat_id, topic_id, codex_thread_id, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(channel, chat_id, topic_id, codex_thread_id) DO UPDATE SET
+          updated_at = excluded.updated_at
+      `)
+      .run(target.channel, target.chatId, normalizeTopic(target.topicId), threadId, now, now);
+  }
+
+  unmuteThread(target: DeliveryTarget, threadId: string): boolean {
+    const result = this.database.connection
+      .prepare(`
+        DELETE FROM muted_threads
+        WHERE channel = ? AND chat_id = ? AND topic_id = ? AND codex_thread_id = ?
+      `)
+      .run(target.channel, target.chatId, normalizeTopic(target.topicId), threadId);
+    return result.changes === 1;
   }
 
   bindMessage(
@@ -312,6 +405,37 @@ export class GatewayStateStore {
       `)
       .all(channel, chatId, Math.max(1, Math.min(limit, 50))) as unknown as BindingRow[];
     return rows.map(mapBinding);
+  }
+
+  private insertTerminalDelivery(
+    target: DeliveryTarget,
+    threadId: string,
+    turnId: string,
+    sourceKind: TerminalDeliverySource,
+    sourceId: string | null,
+    messageId: string,
+    now: number,
+  ): boolean {
+    const result = this.database.connection
+      .prepare(`
+        INSERT INTO terminal_deliveries (
+          channel, chat_id, topic_id, codex_thread_id, codex_turn_id,
+          source_kind, source_id, message_id, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(channel, chat_id, topic_id, codex_thread_id, codex_turn_id) DO NOTHING
+      `)
+      .run(
+        target.channel,
+        target.chatId,
+        normalizeTopic(target.topicId),
+        threadId,
+        turnId,
+        sourceKind,
+        sourceId,
+        messageId,
+        now,
+      );
+    return result.changes === 1;
   }
 }
 

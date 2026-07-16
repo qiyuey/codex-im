@@ -108,6 +108,13 @@ describe("TelegramService", () => {
       codexThreadId: "historical-thread",
       codexTurnId: "new-turn",
     });
+    expect(
+      state.getTerminalDeliveryMessageId(
+        { channel: "telegram", chatId: "42" },
+        "historical-thread",
+        "new-turn",
+      ),
+    ).toBe(placeholder.messageId);
   });
 
   it("does not fall back from an unknown replied message", async () => {
@@ -148,7 +155,10 @@ describe("TelegramService", () => {
 
     await service.handleMessage(message({ text: "/mute" }));
     expect(state.getActiveThread("telegram", "42")).toBe("abcdef12-full");
-    expect(state.getThreadWatch("telegram", "42")).toBeNull();
+    expect(state.isThreadMuted({ channel: "telegram", chatId: "42" }, "abcdef12-full")).toBe(true);
+
+    await service.handleMessage(message({ text: "/unmute" }));
+    expect(state.isThreadMuted({ channel: "telegram", chatId: "42" }, "abcdef12-full")).toBe(false);
 
     await service.handleMessage(message({ text: "/use abcdef12" }));
 
@@ -161,9 +171,9 @@ describe("TelegramService", () => {
 
     await service.handleCallbackQuery(callbackQuery({ messageId: "200", data: "mute:thread-1" }));
 
-    expect(state.getThreadWatch("telegram", "42")).toBeNull();
+    expect(state.isThreadMuted({ channel: "telegram", chatId: "42" }, "thread-1")).toBe(true);
     expect(state.getActiveThread("telegram", "42")).toBe("thread-1");
-    expect(api.callbackAnswers.at(-1)?.text).toBe("已停止此任务的完成通知，仍保持为当前任务。");
+    expect(api.callbackAnswers.at(-1)?.text).toBe("已停止此任务的完成通知。");
     expect(api.edits).toHaveLength(0);
     expect(api.keyboardEdits).toEqual([
       {
@@ -177,7 +187,7 @@ describe("TelegramService", () => {
     await service.handleCallbackQuery(callbackQuery({ messageId: "201", data: "switch:thread-1" }));
 
     expect(state.getActiveThread("telegram", "42")).toBe("thread-1");
-    expect(api.callbackAnswers.at(-1)?.text).toBe("已切换并关注任务 thread-1。");
+    expect(api.callbackAnswers.at(-1)?.text).toBe("已切换到任务 thread-1。");
     expect(api.edits).toHaveLength(0);
   });
 
@@ -189,7 +199,7 @@ describe("TelegramService", () => {
     );
 
     expect(state.getActiveThread("telegram", "42")).toBe("legacy-thread");
-    expect(api.callbackAnswers.at(-1)?.text).toBe("已切换并关注任务 legacy-t。");
+    expect(api.callbackAnswers.at(-1)?.text).toBe("已切换到任务 legacy-t。");
     expect(api.edits).toHaveLength(0);
   });
 
@@ -248,11 +258,11 @@ describe("TelegramService", () => {
     expect(state.getActiveThread("telegram", "42", "9")).toBe("abcdef12-full");
     expect(api.callbackAnswers.at(-1)).toEqual({
       queryId: "callback-1",
-      text: "已切换并关注任务 abcdef12。",
+      text: "已切换到任务 abcdef12。",
     });
     expect(api.edits[1]).toMatchObject({
       ref: { chatId: 42, messageId: "100", topicId: "9" },
-      content: "✅ 已切换并关注任务 abcdef12。",
+      content: "✅ 已切换到任务 abcdef12。",
       format: "plain_text",
       inlineKeyboard: [],
     });
@@ -476,7 +486,7 @@ describe("TelegramService", () => {
     expect(api.edits.at(-1)?.content).not.toContain("Reply to continue");
     expect(api.edits.at(-1)?.inlineKeyboard?.[0]?.map((button) => button.text)).toEqual([
       "切换到此任务",
-      "停止通知",
+      "停止此任务通知",
     ]);
 
     await service.handleCallbackQuery(

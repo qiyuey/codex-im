@@ -32,6 +32,17 @@ export class Dispatcher {
         this.events.markDelivered(event.id, event.leaseToken);
         return true;
       }
+      if (
+        this.state.getTerminalDeliveryMessageId(
+          this.target,
+          event.codexThreadId,
+          event.codexTurnId,
+        ) ||
+        this.state.isThreadMuted(this.target, event.codexThreadId)
+      ) {
+        this.events.markDelivered(event.id, event.leaseToken);
+        return true;
+      }
       const result = await this.appServer.readTurn(event.codexThreadId, event.codexTurnId);
       if (result.status === "in_progress") throw new Error("Codex turn is still in progress");
       if (!(await this.workspaceAllowed(result.cwd))) {

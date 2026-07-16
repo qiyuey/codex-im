@@ -12,6 +12,7 @@ await build({
   entryPoints: {
     cli: "src/cli.ts",
     daemon: "src/daemon.ts",
+    "hooks/stop": "src/hooks/stop.ts",
     "mcp/server": "src/mcp/server.ts",
   },
   format: "esm",
@@ -24,3 +25,4 @@ await build({
 
 await chmod("dist/cli.js", 0o755);
 await chmod("dist/daemon.js", 0o755);
+await chmod("dist/hooks/stop.js", 0o755);

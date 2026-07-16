@@ -4,6 +4,7 @@ const lines = createInterface({ input: process.stdin });
 let initialized = false;
 let experimentalApi = false;
 let pendingInputThreadId = null;
+const loadedThreads = new Set();
 
 lines.on("line", (line) => {
   const message = JSON.parse(line);
@@ -16,6 +17,12 @@ lines.on("line", (line) => {
     initialized = true;
   } else if (message.method === "thread/read") {
     if (!initialized) throw new Error("not initialized");
+    if (!loadedThreads.has(message.params.threadId)) {
+      process.stdout.write(
+        `${JSON.stringify({ id: message.id, error: { code: -32600, message: `thread not loaded: ${message.params.threadId}` } })}\n`,
+      );
+      return;
+    }
     process.stdout.write(
       `${JSON.stringify({
         id: message.id,
@@ -53,6 +60,7 @@ lines.on("line", (line) => {
     if (message.params.sandbox !== "danger-full-access") {
       throw new Error("thread/start must use danger-full-access");
     }
+    loadedThreads.add("thread-fresh");
     process.stdout.write(
       `${JSON.stringify({ id: message.id, result: { thread: { id: "thread-fresh", cwd: message.params.cwd }, cwd: message.params.cwd } })}\n`,
     );
@@ -63,6 +71,7 @@ lines.on("line", (line) => {
       `${JSON.stringify({ id: message.id, error: { code: -32600, message: "no rollout found" } })}\n`,
     );
   } else if (message.method === "thread/resume") {
+    loadedThreads.add(message.params.threadId);
     process.stdout.write(
       `${JSON.stringify({ id: message.id, result: { cwd: "/workspace/example" } })}\n`,
     );

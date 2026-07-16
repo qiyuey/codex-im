@@ -37,7 +37,7 @@ describe("ThreadWatchMonitor", () => {
     expect(sendRichMessage.mock.calls[0]?.[3]).toEqual([
       [
         { text: "切换到此任务", callbackData: "switch:thread-1" },
-        { text: "停止通知", callbackData: "mute:thread-1" },
+        { text: "停止此任务通知", callbackData: "mute:thread-1" },
       ],
     ]);
     expect(state.getThreadWatch("telegram", "42")?.lastDeliveredTurnId).toBe("turn-new");
@@ -45,6 +45,35 @@ describe("ThreadWatchMonitor", () => {
       codexThreadId: "thread-1",
       codexTurnId: "turn-new",
     });
+  });
+
+  it("acknowledges a terminal turn already delivered by the global hook", async () => {
+    state.recordTerminalDelivery(
+      { channel: "telegram", chatId: "42" },
+      "thread-1",
+      "turn-new",
+      "completion_event",
+      "event-1",
+      "global-message",
+    );
+    const reader = { readThreadSnapshot: vi.fn(async () => snapshot()) };
+    const monitor = new ThreadWatchMonitor(state, reader, api, async () => true, 0);
+
+    await monitor.runOnce(1_000);
+
+    expect(sendRichMessage).not.toHaveBeenCalled();
+    expect(state.getThreadWatch("telegram", "42")?.lastDeliveredTurnId).toBe("turn-new");
+  });
+
+  it("acknowledges a muted watched turn without sending", async () => {
+    state.muteThread({ channel: "telegram", chatId: "42" }, "thread-1");
+    const reader = { readThreadSnapshot: vi.fn(async () => snapshot()) };
+    const monitor = new ThreadWatchMonitor(state, reader, api, async () => true, 0);
+
+    await monitor.runOnce(1_000);
+
+    expect(sendRichMessage).not.toHaveBeenCalled();
+    expect(state.getThreadWatch("telegram", "42")?.lastDeliveredTurnId).toBe("turn-new");
   });
 
   it("does not deliver a transient empty interruption before the turn resumes", async () => {

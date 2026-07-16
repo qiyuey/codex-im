@@ -4,7 +4,7 @@
 
 简体中文 | [English](README.md)
 
-[![CI](https://github.com/qiyuey/codex-im-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/qiyuey/codex-im-gateway/actions/workflows/ci.yml)
+[![CI](https://github.com/qiyuey/codex-im/actions/workflows/ci.yml/badge.svg)](https://github.com/qiyuey/codex-im/actions/workflows/ci.yml)
 [![Node.js](https://img.shields.io/badge/Node.js-26%2B-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![pnpm](https://img.shields.io/badge/pnpm-11%2B-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -46,7 +46,7 @@ Bot Token 都属于本机安全边界，请像保护电脑本身一样保护它�
 ### 1. 构建网关
 
 ```bash
-git clone https://github.com/qiyuey/codex-im-gateway.git codex-im
+git clone https://github.com/qiyuey/codex-im.git
 cd codex-im
 pnpm install --frozen-lockfile
 pnpm check
@@ -232,8 +232,8 @@ Codex 没有为本次投递提供一致、可信的任务与执行元数据。�
 
 ## 支持与反馈
 
-- [报告问题](https://github.com/qiyuey/codex-im-gateway/issues/new?template=bug_report.yml)
-- [提交功能建议](https://github.com/qiyuey/codex-im-gateway/issues/new?template=feature_request.yml)
+- [报告问题](https://github.com/qiyuey/codex-im/issues/new?template=bug_report.yml)
+- [提交功能建议](https://github.com/qiyuey/codex-im/issues/new?template=feature_request.yml)
 
 ## 许可证
 

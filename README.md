@@ -4,7 +4,7 @@
 
 [简体中文](README.zh-CN.md) | English
 
-[![CI](https://github.com/qiyuey/codex-im-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/qiyuey/codex-im-gateway/actions/workflows/ci.yml)
+[![CI](https://github.com/qiyuey/codex-im/actions/workflows/ci.yml/badge.svg)](https://github.com/qiyuey/codex-im/actions/workflows/ci.yml)
 [![Node.js](https://img.shields.io/badge/Node.js-26%2B-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![pnpm](https://img.shields.io/badge/pnpm-11%2B-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -52,7 +52,7 @@ itself.
 ### 1. Build the gateway
 
 ```bash
-git clone https://github.com/qiyuey/codex-im-gateway.git codex-im
+git clone https://github.com/qiyuey/codex-im.git
 cd codex-im
 pnpm install --frozen-lockfile
 pnpm check
@@ -258,8 +258,8 @@ The gateway sends the result but does not guess which task replies should enter.
 
 ## Support
 
-- [Report a bug](https://github.com/qiyuey/codex-im-gateway/issues/new?template=bug_report.yml)
-- [Request a feature](https://github.com/qiyuey/codex-im-gateway/issues/new?template=feature_request.yml)
+- [Report a bug](https://github.com/qiyuey/codex-im/issues/new?template=bug_report.yml)
+- [Request a feature](https://github.com/qiyuey/codex-im/issues/new?template=feature_request.yml)
 
 ## License
 

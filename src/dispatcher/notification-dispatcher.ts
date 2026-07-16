@@ -1,3 +1,4 @@
+import { GATEWAY_PROTOCOL_VERSION } from "../core/build-info.js";
 import type { OutboundNotification } from "../core/types.js";
 import type { OutboundNotificationStore } from "../storage/notification-store.js";
 
@@ -31,6 +32,15 @@ export class NotificationDispatcher {
     if (!notification?.leaseToken) return false;
 
     try {
+      if (notification.ingress.protocolVersion !== GATEWAY_PROTOCOL_VERSION) {
+        this.notifications.markFailed(
+          notification.id,
+          notification.leaseToken,
+          `unsupported ingress protocol ${notification.ingress.protocolVersion}`,
+          { maxAttempts: 1 },
+        );
+        return true;
+      }
       if (!(await this.workspaceAllowed(notification.cwd))) {
         this.notifications.markFailed(
           notification.id,

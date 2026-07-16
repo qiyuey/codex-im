@@ -184,4 +184,25 @@ export const migrations: readonly Migration[] = [
       ) STRICT;
     `,
   },
+  {
+    version: 6,
+    name: "versioned_ingress_metadata",
+    sql: `
+      ALTER TABLE completion_events
+        ADD COLUMN ingress_producer TEXT NOT NULL DEFAULT 'legacy'
+        CHECK (ingress_producer IN ('stop_hook', 'mcp', 'internal', 'legacy'));
+      ALTER TABLE completion_events
+        ADD COLUMN producer_version TEXT NOT NULL DEFAULT '0.1.0';
+      ALTER TABLE completion_events
+        ADD COLUMN protocol_version INTEGER NOT NULL DEFAULT 1 CHECK (protocol_version > 0);
+
+      ALTER TABLE outbound_notifications
+        ADD COLUMN ingress_producer TEXT NOT NULL DEFAULT 'legacy'
+        CHECK (ingress_producer IN ('stop_hook', 'mcp', 'internal', 'legacy'));
+      ALTER TABLE outbound_notifications
+        ADD COLUMN producer_version TEXT NOT NULL DEFAULT '0.1.0';
+      ALTER TABLE outbound_notifications
+        ADD COLUMN protocol_version INTEGER NOT NULL DEFAULT 1 CHECK (protocol_version > 0);
+    `,
+  },
 ] as const;

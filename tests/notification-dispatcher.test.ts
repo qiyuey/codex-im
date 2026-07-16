@@ -87,6 +87,29 @@ describe("NotificationDispatcher", () => {
     expect(sender.sendNotification).not.toHaveBeenCalled();
     expect(store.list("delivered")[0]?.platformMessageId).toBe("existing-message");
   });
+
+  it("dead-letters an unsupported MCP ingress protocol without sending", async () => {
+    store.enqueue(
+      {
+        idempotencyKey: "future:notification",
+        channel: "telegram",
+        cwd: "/workspace/example",
+        title: "Future result",
+        message: "Done.",
+        source: { kind: "notification_only" },
+        ingress: { producer: "mcp", protocolVersion: 99 },
+      },
+      1_000,
+    );
+    const sender = { sendNotification: vi.fn() };
+    const dispatcher = new NotificationDispatcher(store, sender, async () => true);
+
+    await dispatcher.runOnce(1_100);
+
+    expect(store.counts().deadLetter).toBe(1);
+    expect(store.list("dead_letter")[0]?.lastError).toBe("unsupported ingress protocol 99");
+    expect(sender.sendNotification).not.toHaveBeenCalled();
+  });
 });
 
 function enqueue() {

@@ -123,6 +123,32 @@ describe("Dispatcher", () => {
     expect(events.counts().delivered).toBe(1);
     expect(sender.sendCompletion).not.toHaveBeenCalled();
   });
+
+  it("dead-letters an unsupported plugin ingress protocol without reading Codex", async () => {
+    events.enqueue(
+      {
+        idempotencyKey: "future:turn",
+        codexThreadId: "future",
+        codexTurnId: "turn",
+        cwd: "/workspace",
+        eventType: "completed",
+        ingress: { producer: "stop_hook", protocolVersion: 99 },
+      },
+      1_000,
+    );
+    const reader = { readTurn: vi.fn() };
+    const sender = { sendCompletion: vi.fn() };
+    const dispatcher = new Dispatcher(events, state, reader, sender, {
+      channel: "telegram",
+      chatId: "42",
+    });
+
+    await dispatcher.runOnce(1_100);
+
+    expect(events.counts().deadLetter).toBe(1);
+    expect(events.list("dead_letter")[0]?.lastError).toBe("unsupported ingress protocol 99");
+    expect(reader.readTurn).not.toHaveBeenCalled();
+  });
 });
 
 function enqueue() {

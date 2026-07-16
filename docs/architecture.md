@@ -24,8 +24,9 @@ never inferred from cwd, title, recency, or the active-thread pointer.
 
 ### Codex plugin package
 
-The repository is the plugin root. The plugin bundles three Codex-facing
-surfaces while keeping the long-running gateway daemon independent:
+The product has a Codex control plane and an independently supervised data plane. The repository
+remains the plugin root for local development, while the build emits separate minimal plugin and
+runtime artifacts:
 
 ```text
 Codex plugin
@@ -44,6 +45,11 @@ Codex plugin
 The MCP server writes only to the gateway's private data directory, never to the
 installed plugin cache. Long-lived Telegram polling does not run inside the MCP
 stdio process.
+
+The daemon owns an atomic heartbeat and a single-instance lock in the private data directory.
+CLI/MCP health is `ok` only when the heartbeat is fresh, its PID is alive, and the runtime ingress
+protocol matches the plugin protocol. Durable ingress records include producer, producer version,
+and protocol version so mismatched upgrades fail closed without losing the record.
 
 ### Explicit notification producer
 
@@ -219,6 +225,8 @@ Implemented decisions:
 2. explicit Skill plus MCP task-result delivery.
 3. single watched-thread terminal delivery per Telegram chat/topic.
 4. global top-level completion delivery decoupled from active routing.
+5. supervised runtime separated from the plugin control plane with versioned ingress and truthful
+   health.
 
 Future ADR candidates include app-server lifecycle, SQLite migration strategy,
 thread concurrency, adapter API stability, and artifact containment.

@@ -2,8 +2,8 @@
 
 ## 1. Objective
 
-Build an open-source, local-first gateway that delivers selected Codex task
-results to instant-messaging platforms. Messages with a trusted Codex source let
+Build an open-source, local-first gateway that delivers every allowed top-level Codex task
+result to instant-messaging platforms. Messages with a trusted Codex source let
 the user continue the exact thread by replying; messages without that identity
 are explicitly notification-only.
 
@@ -15,7 +15,7 @@ thread routing or delivery state.
 
 ### 2.1 Completion delivery
 
-When a selected or watched turn finishes, the gateway sends a message containing:
+When an allowed top-level turn finishes, the gateway sends a message containing:
 
 - schedule or task title;
 - completion, failure, or blocked status;
@@ -141,9 +141,10 @@ The producer must:
 - never block Codex because an IM platform is unavailable;
 - remain inactive unless the task prompt explicitly requests delivery.
 
-Lifecycle hooks are intentionally not used to infer delivery intent. They are a
-better fit for universal cross-cutting behavior than for a subset of scheduled
-tasks.
+The plugin `Stop` hook is the automatic producer for universal top-level completion delivery. It
+writes a small versioned event to the durable local inbox without reading transcripts or accessing
+the network. The explicit Skill/MCP producer remains available only when a task needs custom,
+self-contained notification content.
 
 The current generic MCP call does not carry a trusted Codex source and therefore
 enqueues `notification_only`. A future trusted producer may enqueue `bound_task`

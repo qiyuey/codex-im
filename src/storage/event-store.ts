@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { GATEWAY_PROTOCOL_VERSION, GATEWAY_RUNTIME_VERSION } from "../core/build-info.js";
 import type {
   CompletionEvent,
   CompletionEventType,
@@ -17,6 +18,9 @@ interface EventRow {
   cwd: string;
   event_type: CompletionEventType;
   payload_json: string;
+  ingress_producer: CompletionEvent["ingress"]["producer"];
+  producer_version: string;
+  protocol_version: number;
   state: EventState;
   attempt_count: number;
   next_attempt_at: number;
@@ -51,8 +55,9 @@ export class CompletionEventStore {
       .prepare(`
         INSERT INTO completion_events (
           id, idempotency_key, codex_thread_id, codex_turn_id, cwd, event_type,
-          payload_json, state, next_attempt_at, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?)
+          payload_json, ingress_producer, producer_version, protocol_version,
+          state, next_attempt_at, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?)
         ON CONFLICT(idempotency_key) DO NOTHING
       `)
       .run(
@@ -63,6 +68,9 @@ export class CompletionEventStore {
         input.cwd,
         input.eventType,
         payloadJson,
+        input.ingress?.producer ?? "internal",
+        input.ingress?.producerVersion ?? GATEWAY_RUNTIME_VERSION,
+        input.ingress?.protocolVersion ?? GATEWAY_PROTOCOL_VERSION,
         now,
         now,
         now,
@@ -217,6 +225,11 @@ function mapEvent(row: EventRow): CompletionEvent {
     cwd: row.cwd,
     eventType: row.event_type,
     payload,
+    ingress: {
+      producer: row.ingress_producer,
+      producerVersion: row.producer_version,
+      protocolVersion: row.protocol_version,
+    },
     state: row.state,
     attemptCount: row.attempt_count,
     nextAttemptAt: row.next_attempt_at,

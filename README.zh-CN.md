@@ -87,16 +87,20 @@ CODEX_IM_GATEWAY_LANGUAGE=zh
 
 ### 4. 启动并验证
 
-在安装 Codex 的电脑上保持守护进程运行：
+在安装 Codex 的电脑上安装由 launchd 托管的守护进程：
 
 ```bash
-pnpm start
+node dist/cli.js service install --runtime-root "$PWD" --env-file "$PWD/.env"
+node dist/cli.js service status
 ```
+
+`pnpm start` 仅用于前台开发调试。
 
 另开一个终端，确认网关和 Codex 连接都正常：
 
 ```bash
 node dist/cli.js health
+node dist/cli.js doctor
 node dist/cli.js app-server-health
 ```
 

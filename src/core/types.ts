@@ -4,6 +4,14 @@ export type EventState = (typeof eventStates)[number];
 export const completionEventTypes = ["completed", "failed", "blocked"] as const;
 export type CompletionEventType = (typeof completionEventTypes)[number];
 
+export type IngressProducer = "stop_hook" | "mcp" | "internal" | "legacy";
+
+export interface IngressMetadata {
+  readonly producer: IngressProducer;
+  readonly producerVersion: string;
+  readonly protocolVersion: number;
+}
+
 export interface EnqueueCompletionInput {
   readonly idempotencyKey: string;
   readonly codexThreadId: string;
@@ -11,6 +19,7 @@ export interface EnqueueCompletionInput {
   readonly cwd: string;
   readonly eventType: CompletionEventType;
   readonly payload?: Readonly<Record<string, unknown>>;
+  readonly ingress?: Partial<IngressMetadata>;
 }
 
 export interface CompletionEvent {
@@ -21,6 +30,7 @@ export interface CompletionEvent {
   readonly cwd: string;
   readonly eventType: CompletionEventType;
   readonly payload: Readonly<Record<string, unknown>>;
+  readonly ingress: IngressMetadata;
   readonly state: EventState;
   readonly attemptCount: number;
   readonly nextAttemptAt: number;
@@ -53,10 +63,12 @@ export interface EnqueueNotificationInput {
   readonly title: string;
   readonly message: string;
   readonly source: NotificationSource;
+  readonly ingress?: Partial<IngressMetadata>;
 }
 
-export interface OutboundNotification extends EnqueueNotificationInput {
+export interface OutboundNotification extends Omit<EnqueueNotificationInput, "ingress"> {
   readonly id: string;
+  readonly ingress: IngressMetadata;
   readonly state: EventState;
   readonly attemptCount: number;
   readonly nextAttemptAt: number;

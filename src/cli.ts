@@ -1,8 +1,14 @@
 #!/usr/bin/env node
 import { parseArgs } from "node:util";
+import { collectGatewayHealth } from "./application/health.js";
 import { AppServerClient } from "./codex/app-server-client.js";
-import { resolveDatabasePath } from "./config/paths.js";
 import { type EventState, eventStates } from "./core/types.js";
+import {
+  installLaunchdService,
+  readLaunchdServiceState,
+  restartLaunchdService,
+  uninstallLaunchdService,
+} from "./runtime/launchd-service.js";
 import { LocalKillSwitch } from "./security/kill-switch.js";
 import { openEventStore, openNotificationStore } from "./storage/open-store.js";
 
@@ -10,12 +16,20 @@ const command = process.argv[2] ?? "help";
 
 if (command === "help" || command === "--help" || command === "-h") {
   process.stdout.write(
-    `codex-im-gateway <command>\n\nCommands:\n  health\n  app-server-health\n  disable\n  enable\n  events [--state <state>] [--limit <n>]\n  notifications [--state <state>] [--limit <n>]\n  recover\n`,
+    `codex-im-gateway <command>\n\nCommands:\n  health\n  doctor\n  app-server-health\n  service status\n  service install [--runtime-root <path>] [--env-file <path>]\n  service restart\n  service uninstall\n  disable\n  enable\n  events [--state <state>] [--limit <n>]\n  notifications [--state <state>] [--limit <n>]\n  recover\n`,
   );
   process.exit(0);
 }
 
-if (command === "app-server-health") {
+if (command === "service") {
+  try {
+    await runServiceCommand();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    process.stderr.write(`${message}\n`);
+    process.exitCode = 1;
+  }
+} else if (command === "app-server-health") {
   const client = new AppServerClient();
   try {
     const response = await client.connect();
@@ -36,19 +50,10 @@ if (command === "app-server-health") {
   const context = openEventStore();
   const killSwitch = new LocalKillSwitch();
   try {
-    if (command === "health") {
-      const notificationContext = openNotificationStore();
-      try {
-        printJson({
-          status: "ok",
-          inboundEnabled: killSwitch.isInboundEnabled(),
-          databasePath: resolveDatabasePath(),
-          ...context.store.counts(),
-          notifications: notificationContext.store.counts(),
-        });
-      } finally {
-        notificationContext.database.close();
-      }
+    if (command === "health" || command === "doctor") {
+      const health = collectGatewayHealth();
+      printJson(health);
+      if (command === "doctor" && health.status !== "ok") process.exitCode = 1;
     } else if (command === "disable") {
       killSwitch.disable();
       printJson({ inboundEnabled: false });
@@ -105,4 +110,37 @@ function parseState(value: string): EventState {
 
 function printJson(value: unknown): void {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
+}
+
+async function runServiceCommand(): Promise<void> {
+  const action = process.argv[3] ?? "status";
+  if (action === "status") {
+    printJson(readLaunchdServiceState());
+    return;
+  }
+  if (action === "restart") {
+    printJson(restartLaunchdService());
+    return;
+  }
+  if (action === "uninstall") {
+    printJson(uninstallLaunchdService());
+    return;
+  }
+  if (action === "install") {
+    const { values } = parseArgs({
+      args: process.argv.slice(4),
+      options: {
+        "runtime-root": { type: "string", default: process.cwd() },
+        "env-file": { type: "string" },
+      },
+    });
+    printJson(
+      installLaunchdService({
+        runtimeRoot: values["runtime-root"],
+        ...(values["env-file"] ? { envFile: values["env-file"] } : {}),
+      }),
+    );
+    return;
+  }
+  throw new Error(`Unknown service command: ${action}`);
 }

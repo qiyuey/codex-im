@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
+import { GATEWAY_PROTOCOL_VERSION, GATEWAY_RUNTIME_VERSION } from "../core/build-info.js";
 import type {
   EnqueueNotificationInput,
   EventCounts,
   EventState,
+  IngressProducer,
   OutboundNotification,
 } from "../core/types.js";
 import { validateNotificationInput } from "../core/validation.js";
@@ -19,6 +21,9 @@ interface NotificationRow {
   source_kind: "notification_only" | "bound_task";
   codex_thread_id: string | null;
   codex_turn_id: string | null;
+  ingress_producer: IngressProducer;
+  producer_version: string;
+  protocol_version: number;
   state: EventState;
   attempt_count: number;
   next_attempt_at: number;
@@ -41,8 +46,9 @@ export class OutboundNotificationStore {
         INSERT INTO outbound_notifications (
           id, idempotency_key, channel, cwd, title, message,
           source_kind, codex_thread_id, codex_turn_id, state,
+          ingress_producer, producer_version, protocol_version,
           next_attempt_at, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?)
         ON CONFLICT(idempotency_key) DO NOTHING
       `)
       .run(
@@ -55,6 +61,9 @@ export class OutboundNotificationStore {
         input.source.kind,
         input.source.kind === "bound_task" ? input.source.codexThreadId : null,
         input.source.kind === "bound_task" ? input.source.codexTurnId : null,
+        input.ingress?.producer ?? "internal",
+        input.ingress?.producerVersion ?? GATEWAY_RUNTIME_VERSION,
+        input.ingress?.protocolVersion ?? GATEWAY_PROTOCOL_VERSION,
         now,
         now,
         now,
@@ -222,6 +231,11 @@ function mapNotification(row: NotificationRow): OutboundNotification {
             codexTurnId: row.codex_turn_id,
           }
         : { kind: "notification_only" },
+    ingress: {
+      producer: row.ingress_producer,
+      producerVersion: row.producer_version,
+      protocolVersion: row.protocol_version,
+    },
     state: row.state,
     attemptCount: row.attempt_count,
     nextAttemptAt: row.next_attempt_at,

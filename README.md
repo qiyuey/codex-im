@@ -97,16 +97,20 @@ personal or project marketplace.
 
 ### 4. Start and verify
 
-Keep the daemon running on the computer where Codex is installed:
+Install the supervised daemon on the computer where Codex is installed:
 
 ```bash
-pnpm start
+node dist/cli.js service install --runtime-root "$PWD" --env-file "$PWD/.env"
+node dist/cli.js service status
 ```
+
+Use `pnpm start` only for foreground development.
 
 In another terminal, verify both the gateway and Codex connection:
 
 ```bash
 node dist/cli.js health
+node dist/cli.js doctor
 node dist/cli.js app-server-health
 ```
 

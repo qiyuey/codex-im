@@ -1,4 +1,5 @@
 import type { CanonicalTurnResult } from "../codex/app-server-client.js";
+import { GATEWAY_PROTOCOL_VERSION } from "../core/build-info.js";
 import type { CompletionEventStore } from "../storage/event-store.js";
 import type { DeliveryTarget, GatewayStateStore } from "../storage/gateway-state-store.js";
 
@@ -28,6 +29,15 @@ export class Dispatcher {
     if (!event?.leaseToken) return false;
 
     try {
+      if (event.ingress.protocolVersion !== GATEWAY_PROTOCOL_VERSION) {
+        this.events.markFailed(
+          event.id,
+          event.leaseToken,
+          `unsupported ingress protocol ${event.ingress.protocolVersion}`,
+          { maxAttempts: 1 },
+        );
+        return true;
+      }
       if (this.state.hasSentDelivery(event.id, this.target)) {
         this.events.markDelivered(event.id, event.leaseToken);
         return true;

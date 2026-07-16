@@ -3,9 +3,8 @@ import { resolve } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { resolveDatabasePath } from "../config/paths.js";
+import { collectGatewayHealth } from "../application/health.js";
 import { eventStates } from "../core/types.js";
-import { LocalKillSwitch } from "../security/kill-switch.js";
 import { openEventStore, openNotificationStore } from "../storage/open-store.js";
 import { notificationSourceFromRequestMeta } from "./request-source.js";
 
@@ -15,14 +14,32 @@ server.registerTool(
   "gateway_health",
   {
     description: "Check the local gateway database and completion queue health.",
+    annotations: {
+      title: "Check gateway health",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     outputSchema: z.object({
       databasePath: z.string(),
       deadLetter: z.number(),
       delivered: z.number(),
       leased: z.number(),
       queued: z.number(),
-      status: z.literal("ok"),
+      status: z.enum(["ok", "degraded"]),
       inboundEnabled: z.boolean(),
+      plugin: z.object({ runtimeVersion: z.string(), protocolVersion: z.number() }),
+      runtime: z.object({
+        running: z.boolean(),
+        state: z.enum(["running", "stopped", "stale", "unknown"]),
+        pid: z.number().nullable(),
+        runtimeVersion: z.string().nullable(),
+        protocolVersion: z.number().nullable(),
+        heartbeatAt: z.number().nullable(),
+        heartbeatAgeMs: z.number().nullable(),
+        compatible: z.boolean(),
+      }),
       notifications: z.object({
         deadLetter: z.number(),
         delivered: z.number(),
@@ -31,27 +48,20 @@ server.registerTool(
       }),
     }),
   },
-  async () =>
-    withStore(({ store }) => {
-      const notificationContext = openNotificationStore();
-      try {
-        return success({
-          status: "ok" as const,
-          inboundEnabled: new LocalKillSwitch().isInboundEnabled(),
-          databasePath: resolveDatabasePath(),
-          ...store.counts(),
-          notifications: notificationContext.store.counts(),
-        });
-      } finally {
-        notificationContext.database.close();
-      }
-    }),
+  async () => success(collectGatewayHealth()),
 );
 
 server.registerTool(
   "gateway_list_events",
   {
     description: "List completion event metadata without returning private payload content.",
+    annotations: {
+      title: "List gateway events",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     inputSchema: z.object({
       limit: z.number().int().min(1).max(100).default(20),
       state: z.enum(eventStates).optional(),
@@ -91,6 +101,13 @@ server.registerTool(
   {
     description:
       "Durably queue one explicit final task result for Telegram delivery. Use only when the user or scheduled-task contract explicitly requires Telegram delivery.",
+    annotations: {
+      title: "Deliver result to Telegram",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
     inputSchema: z.object({
       cwd: z.string().min(1).max(4096).describe("Absolute task workspace path"),
       title: z.string().min(1).max(200),
@@ -115,6 +132,7 @@ server.registerTool(
         title,
         message,
         source: notificationSourceFromRequestMeta(extra._meta),
+        ingress: { producer: "mcp" },
       });
       return success({ notificationId: notification.id, state: notification.state, duplicate });
     } finally {
@@ -128,6 +146,13 @@ server.registerTool(
   {
     description:
       "Explicitly enqueue a Codex completion event for delivery testing or fallback production.",
+    annotations: {
+      title: "Enqueue gateway test event",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
     inputSchema: z.object({
       codexThreadId: z.string().min(1).max(256),
       codexTurnId: z.string().min(1).max(256),
@@ -145,6 +170,7 @@ server.registerTool(
         eventType,
         idempotencyKey: `${codexThreadId}:${codexTurnId}`,
         payload: {},
+        ingress: { producer: "mcp" },
       });
       return success({ eventId: event.id, state: event.state });
     }),

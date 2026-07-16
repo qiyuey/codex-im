@@ -42,6 +42,7 @@ describe("Telegram rendering", () => {
         message:
           "## 最终状态\n\n**完成**\n\n- [产物](https://example.com/report?a=1&b=2)\n- `QC`: 通过\n\n| 项目 | 结果 |\n| --- | --- |\n| 测试 | 通过 |",
         source: { kind: "notification_only" },
+        ingress: { producer: "internal", producerVersion: "0.1.0", protocolVersion: 1 },
         state: "queued",
         attemptCount: 0,
         nextAttemptAt: 0,
@@ -242,6 +243,7 @@ function notificationFixture(message: string) {
     title: "Report",
     message,
     source: { kind: "notification_only" as const },
+    ingress: { producer: "internal" as const, producerVersion: "0.1.0", protocolVersion: 1 },
     state: "queued" as const,
     attemptCount: 0,
     nextAttemptAt: 0,

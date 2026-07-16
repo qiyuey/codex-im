@@ -1,14 +1,27 @@
 import { access, readFile } from "node:fs/promises";
 
 const manifest = JSON.parse(await readFile(".codex-plugin/plugin.json", "utf8"));
+const packageJson = JSON.parse(await readFile("package.json", "utf8"));
 const hookConfig = JSON.parse(await readFile("hooks/hooks.json", "utf8"));
+const buildInfo = await readFile("src/core/build-info.ts", "utf8");
 const deliverySkill = await readFile("skills/telegram-delivery/SKILL.md", "utf8");
 const builtMcpServer = await readFile("dist/mcp/server.js", "utf8");
 const builtDaemon = await readFile("dist/daemon.js", "utf8");
 const builtStopHook = await readFile("dist/hooks/stop.js", "utf8");
+const packagedManifest = JSON.parse(
+  await readFile("artifacts/plugin/.codex-plugin/plugin.json", "utf8"),
+);
 
 assert(manifest.name === "codex-im-gateway", "manifest name must match the plugin directory");
 assert(/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(manifest.version), "invalid version");
+assert(
+  manifest.version.split("+")[0] === packageJson.version,
+  "plugin and runtime base versions must match",
+);
+assert(
+  buildInfo.includes(`GATEWAY_RUNTIME_VERSION = "${packageJson.version}"`),
+  "runtime build info version is stale",
+);
 assert(
   typeof manifest.description === "string" && manifest.description.length > 0,
   "missing description",
@@ -44,9 +57,34 @@ assert(
   "Windows Stop hook data dir is not shared",
 );
 assert(builtStopHook.includes("unable to queue completion event"), "built Stop hook is missing");
+assert(packagedManifest.version === manifest.version, "packaged plugin version is stale");
+await Promise.all([
+  access("artifacts/plugin/dist/hooks/stop.js"),
+  access("artifacts/plugin/dist/mcp/server.js"),
+  access("artifacts/plugin/.mcp.json"),
+  access("artifacts/runtime/dist/daemon.js"),
+  access("artifacts/runtime/dist/cli.js"),
+]);
+await assertMissing(
+  "artifacts/plugin/dist/daemon.js",
+  "plugin artifact must not contain the supervised daemon",
+);
+await assertMissing(
+  "artifacts/runtime/.codex-plugin/plugin.json",
+  "runtime artifact must not masquerade as a Codex plugin",
+);
 
 process.stdout.write("Plugin structure is valid.\n");
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+async function assertMissing(path, message) {
+  try {
+    await access(path);
+  } catch {
+    return;
+  }
+  throw new Error(message);
 }

@@ -53,7 +53,16 @@ turns started from Telegram, non-secret
 exact card for a free-form answer. Restarting the daemon invalidates pending
 cards because their app-server JSON-RPC connection has ended.
 
-Run the foreground daemon with:
+For a normal macOS installation, install and start the supervised launchd service from the runtime
+checkout:
+
+```bash
+node dist/cli.js service install --runtime-root "$PWD" --env-file "$PWD/.env"
+node dist/cli.js service status
+node dist/cli.js doctor
+```
+
+Use the foreground daemon only during development:
 
 ```bash
 pnpm start
@@ -63,7 +72,10 @@ pnpm start
 
 ```bash
 node dist/cli.js health
+node dist/cli.js doctor
 node dist/cli.js app-server-health
+node dist/cli.js service status
+node dist/cli.js service restart
 node dist/cli.js disable
 node dist/cli.js enable
 ```
@@ -71,6 +83,10 @@ node dist/cli.js enable
 `disable` is persistent and takes effect before the next inbound Telegram
 action. It does not stop outbound completion delivery. Use `SIGINT` or `SIGTERM`
 to stop the entire foreground daemon gracefully.
+
+`health` always prints structured state. It returns `status: "ok"` only when a fresh heartbeat
+belongs to a live, protocol-compatible daemon; otherwise it returns `status: "degraded"`. `doctor`
+prints the same evidence and exits non-zero when degraded, making it suitable for service checks.
 
 ## Queue recovery
 

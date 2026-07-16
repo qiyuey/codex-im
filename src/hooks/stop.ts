@@ -34,6 +34,7 @@ export function enqueueStopEvent(
       eventType: parseCompletionEventType(input.event_type),
       idempotencyKey: `${threadId}:${turnId}`,
       payload: {},
+      ingress: { producer: "stop_hook" },
     });
     return true;
   } finally {

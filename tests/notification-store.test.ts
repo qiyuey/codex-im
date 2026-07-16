@@ -18,6 +18,11 @@ describe("OutboundNotificationStore", () => {
     const duplicate = enqueue();
 
     expect(duplicate.id).toBe(first.id);
+    expect(first.ingress).toEqual({
+      producer: "internal",
+      producerVersion: "0.1.0",
+      protocolVersion: 1,
+    });
     expect(store.counts()).toEqual({ queued: 1, leased: 0, delivered: 0, deadLetter: 0 });
   });
 

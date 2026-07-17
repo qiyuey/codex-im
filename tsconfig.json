@@ -11,7 +11,7 @@
     "useUnknownInCatchVariables": true,
     "verbatimModuleSyntax": true,
     "esModuleInterop": true,
-    "skipLibCheck": true,
+    "skipLibCheck": false,
     "types": ["node", "vitest/globals"]
   },
   "include": ["src/**/*.ts", "tests/**/*.ts", "vitest.config.ts"]

@@ -271,6 +271,47 @@ describe("Telegram rendering", () => {
     expect(rendered).not.toContain("::git-push");
   });
 
+  it("renders a standalone inbox item as readable completion content", () => {
+    const rendered = renderCompletion(
+      {
+        threadId: "019f7e2d-1234",
+        turnId: "turn-1",
+        status: "completed",
+        finalMessage:
+          '::inbox-item{title="无待研究关键事件" summary="本轮未触发研究或 Telegram 投递"}',
+        cwd: "/workspace/financial",
+        durationMs: 56_000,
+      },
+      "zh",
+    );
+
+    expect(rendered).toContain("无待研究关键事件");
+    expect(rendered).toContain("本轮未触发研究或 Telegram 投递");
+    expect(rendered).not.toContain("::inbox-item");
+  });
+
+  it("strips a trailing inbox item when readable completion content precedes it", () => {
+    const rendered = renderCompletion(
+      {
+        threadId: "019f7e2d-1234",
+        turnId: "turn-1",
+        status: "completed",
+        finalMessage: [
+          "本轮没有待研究事件。",
+          "",
+          '::inbox-item{title="无待研究关键事件" summary="本轮未触发研究或 Telegram 投递"}',
+        ].join("\n"),
+        cwd: "/workspace/financial",
+        durationMs: 56_000,
+      },
+      "zh",
+    );
+
+    expect(rendered).toContain("本轮没有待研究事件。");
+    expect(rendered).not.toContain("无待研究关键事件");
+    expect(rendered).not.toContain("::inbox-item");
+  });
+
   it("preserves unknown, inline, indented, and fenced directive-like content", () => {
     const finalMessage = [
       'Inline example: ::git-push{cwd="/workspace/project" branch="main"}',

@@ -16,6 +16,7 @@ export const TASK_SWITCH_CALLBACK_PREFIX = "switch:";
 
 const CODEX_APP_ONLY_DIRECTIVES = new Set([
   "created-thread",
+  "inbox-item",
   "git-stage",
   "git-commit",
   "git-create-branch",
@@ -193,18 +194,39 @@ function stripTrailingCodexAppDirectives(value: string): string {
   while (end >= 0 && lines[end]?.trim() === "") end -= 1;
 
   let removed = false;
+  let inboxItemFallback: string | null = null;
   while (end >= 0 && !inFence[end] && isCodexAppOnlyDirective(lines[end] ?? "")) {
+    inboxItemFallback ??= renderInboxItemDirective(lines[end] ?? "");
     removed = true;
     end -= 1;
     while (end >= 0 && lines[end]?.trim() === "") end -= 1;
   }
 
-  return (removed ? lines.slice(0, end + 1).join("\n") : value).trim();
+  const body = (removed ? lines.slice(0, end + 1).join("\n") : value).trim();
+  return body || inboxItemFallback || "";
 }
 
 function isCodexAppOnlyDirective(line: string): boolean {
   const match = /^::([a-z][a-z0-9-]*)\{.*\}[ \t]*$/.exec(line);
   return match?.[1] !== undefined && CODEX_APP_ONLY_DIRECTIVES.has(match[1]);
+}
+
+function renderInboxItemDirective(line: string): string | null {
+  if (!/^::inbox-item\{.*\}[ \t]*$/.test(line)) return null;
+  const title = directiveStringAttribute(line, "title");
+  const summary = directiveStringAttribute(line, "summary");
+  return [title, summary].filter((value): value is string => Boolean(value)).join("\n\n") || null;
+}
+
+function directiveStringAttribute(line: string, name: string): string | null {
+  const match = new RegExp(`(?:^|[ \\t{])${name}=("(?:\\\\.|[^"\\\\])*")`).exec(line);
+  if (!match?.[1]) return null;
+  try {
+    const value = JSON.parse(match[1]) as unknown;
+    return typeof value === "string" && value.trim() ? value.trim() : null;
+  } catch {
+    return null;
+  }
 }
 
 function fencedCodeLines(lines: readonly string[]): boolean[] {

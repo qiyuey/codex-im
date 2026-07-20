@@ -55,7 +55,9 @@ export class Dispatcher {
       }
       const result = await this.appServer.readTurn(event.codexThreadId, event.codexTurnId);
       if (result.status === "in_progress") throw new Error("Codex turn is still in progress");
-      if (result.threadSource === "automation" && !this.isExplicitlyWatched(result.threadId)) {
+      const isAutomation =
+        event.payload.threadSource === "automation" || result.threadSource === "automation";
+      if (isAutomation && !this.isExplicitlyWatched(result.threadId)) {
         this.events.markDelivered(event.id, event.leaseToken);
         return true;
       }

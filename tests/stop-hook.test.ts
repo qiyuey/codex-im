@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -45,6 +45,41 @@ describe("Stop hook", () => {
 
   it("ignores events other than the top-level Stop lifecycle event", () => {
     expect(enqueueStopEvent({ hook_event_name: "SubagentStop" }, {})).toBe(false);
+  });
+
+  it("captures automation provenance from the transcript session metadata", async () => {
+    const root = await mkdtemp(join(tmpdir(), "codex-im-hook-"));
+    roots.push(root);
+    const transcriptPath = join(root, "thread-automation.jsonl");
+    await writeFile(
+      transcriptPath,
+      `${JSON.stringify({
+        type: "session_meta",
+        payload: { id: "thread-automation", thread_source: "automation" },
+      })}\n`,
+    );
+
+    expect(
+      enqueueStopEvent(
+        {
+          hook_event_name: "Stop",
+          session_id: "thread-automation",
+          turn_id: "turn-1",
+          transcript_path: transcriptPath,
+          cwd: "/workspace/example",
+        },
+        { CODEX_IM_DATA_DIR: root },
+      ),
+    ).toBe(true);
+
+    const database = new GatewayDatabase(join(root, "gateway.sqlite"));
+    try {
+      expect(new CompletionEventStore(database).list()[0]?.payload).toEqual({
+        threadSource: "automation",
+      });
+    } finally {
+      database.close();
+    }
   });
 
   it("ignores transcriptless internal and ephemeral sessions", () => {

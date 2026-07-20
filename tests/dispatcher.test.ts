@@ -148,6 +148,29 @@ describe("Dispatcher", () => {
     expect(sender.sendCompletion).not.toHaveBeenCalled();
   });
 
+  it("uses captured hook provenance when thread/read omits the automation source", async () => {
+    enqueue({ threadSource: "automation" });
+    const reader = {
+      readTurn: vi.fn(async () => ({
+        threadId: "thread-1",
+        turnId: "turn-1",
+        status: "completed" as const,
+        finalMessage: '::inbox-item{title="Nothing new" summary="No action required"}',
+        cwd: "/workspace",
+      })),
+    };
+    const sender = { sendCompletion: vi.fn() };
+    const dispatcher = new Dispatcher(events, state, reader, sender, {
+      channel: "telegram",
+      chatId: "42",
+    });
+
+    await dispatcher.runOnce(1_100);
+
+    expect(events.counts().delivered).toBe(1);
+    expect(sender.sendCompletion).not.toHaveBeenCalled();
+  });
+
   it("delivers automation completions after the task is explicitly selected", async () => {
     enqueue();
     state.selectAndWatchThread("telegram", "42", null, "thread-1");
@@ -200,7 +223,7 @@ describe("Dispatcher", () => {
   });
 });
 
-function enqueue() {
+function enqueue(payload: Readonly<Record<string, unknown>> = {}) {
   return events.enqueue(
     {
       idempotencyKey: "thread-1:turn-1",
@@ -208,6 +231,7 @@ function enqueue() {
       codexTurnId: "turn-1",
       cwd: "/workspace",
       eventType: "completed",
+      payload,
     },
     1_000,
   );

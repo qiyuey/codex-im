@@ -1,8 +1,10 @@
+import { closeSync, openSync, readSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { parseCompletionEventType } from "../core/validation.js";
 import { openEventStore } from "../storage/open-store.js";
 
 const MAX_INPUT_BYTES = 256 * 1024;
+const SESSION_META_PREFIX_BYTES = 16 * 1024;
 
 export interface StopHookInput {
   readonly session_id?: unknown;
@@ -24,7 +26,9 @@ export function enqueueStopEvent(
 
   const threadId = requireString(input.session_id, "session_id");
   const turnId = requireString(input.turn_id, "turn_id");
+  const transcriptPath = requireString(input.transcript_path, "transcript_path");
   const cwd = requireString(input.cwd, "cwd");
+  const threadSource = readThreadSource(transcriptPath);
   const { database, store } = openEventStore(env);
   try {
     store.enqueue({
@@ -33,12 +37,27 @@ export function enqueueStopEvent(
       cwd,
       eventType: parseCompletionEventType(input.event_type),
       idempotencyKey: `${threadId}:${turnId}`,
-      payload: {},
+      payload: threadSource ? { threadSource } : {},
       ingress: { producer: "stop_hook" },
     });
     return true;
   } finally {
     database.close();
+  }
+}
+
+function readThreadSource(transcriptPath: string): "automation" | null {
+  let descriptor: number | null = null;
+  try {
+    descriptor = openSync(transcriptPath, "r");
+    const buffer = Buffer.alloc(SESSION_META_PREFIX_BYTES);
+    const bytesRead = readSync(descriptor, buffer, 0, buffer.length, 0);
+    const prefix = buffer.subarray(0, bytesRead).toString("utf8");
+    return /"thread_source"\s*:\s*"automation"/.test(prefix) ? "automation" : null;
+  } catch {
+    return null;
+  } finally {
+    if (descriptor !== null) closeSync(descriptor);
   }
 }
 

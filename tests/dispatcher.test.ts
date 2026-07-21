@@ -109,6 +109,41 @@ describe("Dispatcher", () => {
     expect(sender.sendCompletion).not.toHaveBeenCalled();
   });
 
+  it("does not send when a direct reply finishes while the completion turn is being read", async () => {
+    enqueue();
+    const target = { channel: "telegram", chatId: "42" };
+    const reader = {
+      readTurn: vi.fn(async () => {
+        state.recordTerminalDelivery(
+          target,
+          "thread-1",
+          "turn-1",
+          "telegram_turn",
+          null,
+          "edited-placeholder",
+        );
+        return {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          status: "completed" as const,
+          finalMessage: "done",
+          cwd: "/workspace",
+        };
+      }),
+    };
+    const sender = { sendCompletion: vi.fn(async () => ({ messageId: "duplicate" })) };
+    const dispatcher = new Dispatcher(events, state, reader, sender, target);
+
+    await dispatcher.runOnce(1_100);
+
+    expect(events.counts().delivered).toBe(1);
+    expect(reader.readTurn).toHaveBeenCalledOnce();
+    expect(sender.sendCompletion).not.toHaveBeenCalled();
+    expect(state.getTerminalDeliveryMessageId(target, "thread-1", "turn-1")).toBe(
+      "edited-placeholder",
+    );
+  });
+
   it("acknowledges a muted thread without sending", async () => {
     enqueue();
     state.muteThread({ channel: "telegram", chatId: "42" }, "thread-1");

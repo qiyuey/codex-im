@@ -67,6 +67,15 @@ export class Dispatcher {
         });
         return true;
       }
+      // Reading the turn can race with the direct Telegram reply path finishing
+      // and recording its edited placeholder. Re-check immediately before send
+      // so the Stop Hook completion does not emit the same final answer again.
+      if (
+        this.state.getTerminalDeliveryMessageId(this.target, event.codexThreadId, event.codexTurnId)
+      ) {
+        this.events.markDelivered(event.id, event.leaseToken);
+        return true;
+      }
       const sent = await this.sender.sendCompletion(result, event.id);
       this.state.recordSentDelivery(event.id, this.target, sent.messageId, {
         threadId: result.threadId,
